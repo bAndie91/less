@@ -222,6 +222,14 @@ if [ $# -eq 1 ] ; then
 				fi
 				;;
 
+			*.tar.zst|*.tzst)
+				if [ -x "`which zstd`" ]; then
+					zstd -qdc "$1" | tar tfvv -
+				else
+					echo "No zstd available"
+				fi
+				;;
+
 			*.whl)
 				if [ -x "`which unzip`" ]; then
 					unzip -p "$1" '*.dist-info/METADATA' | sed '/^$/q'
@@ -236,6 +244,14 @@ if [ $# -eq 1 ] ; then
 					xz -dc "$1"
 				else
 					echo "No xz available"
+				fi
+				;;
+
+			*.zst)
+				if [ -x "`which zstd`" ]; then
+					zstd -qdc "$1"
+				else
+					echo "No zstd available"
 				fi
 				;;
 

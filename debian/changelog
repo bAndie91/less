@@ -1,8 +1,12 @@
 less (590-1) UNRELEASED; urgency=medium
 
+  [ Milan Kupcevic ]
   * new upstream release (closes: #983599, #995984)
     - avoid spurious empty lines (closes: #763631)
     - remove erroneous free() (closes: #990035)
+
+  [ Adam Borowski ]
+  * lesspipe: support zstd-compressed files (closes: #964930)
 
  -- Milan Kupcevic <milan@debian.org>  Mon, 13 Dec 2021 02:00:27 -0500
 
