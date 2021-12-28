@@ -7,6 +7,8 @@ less (590-1) UNRELEASED; urgency=medium
   * debian/lesspipe.1: list zstd related file types
   * debian/lesspipe: redo lessfilter handling
     (closes: #788438, #992354)(lp: #1915568)
+  * debian/lesspipe: safeguard from possible improper delete
+    (closes: #1002301)
   * refresh quilt patches
 
   [ Adam Borowski ]

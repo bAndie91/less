@@ -310,6 +310,7 @@ elif [ $# -eq 2 ] ; then
 		if [ -n "$BASH" ]; then
 			if [ ! -O "$2" ]; then
 				echo "Error in deleting $2" > /dev/tty
+				exit 1
 			fi
 		fi
 
