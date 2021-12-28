@@ -5,6 +5,8 @@ less (590-1) UNRELEASED; urgency=medium
     - avoid spurious empty lines (closes: #763631)
     - remove erroneous free() (closes: #990035)
   * debian/lesspipe.1: list zstd related file types
+  * debian/lesspipe: redo lessfilter handling
+    (closes: #788438, #992354)(lp: #1915568)
   * refresh quilt patches
 
   [ Adam Borowski ]
