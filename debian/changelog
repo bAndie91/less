@@ -1,4 +1,4 @@
-less (590-1) UNRELEASED; urgency=medium
+less (590-1) sid; urgency=low
 
   [ Milan Kupcevic ]
   * new upstream release (closes: #983599, #995984)
@@ -16,7 +16,7 @@ less (590-1) UNRELEASED; urgency=medium
   [ Adam Borowski ]
   * lesspipe: support zstd-compressed files (closes: #964930)
 
- -- Milan Kupcevic <milan@debian.org>  Mon, 13 Dec 2021 02:00:27 -0500
+ -- Milan Kupcevic <milan@debian.org>  Thu, 30 Dec 2021 01:54:19 -0500
 
 less (551-2) sid; urgency=medium
 
