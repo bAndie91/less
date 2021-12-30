@@ -10,6 +10,8 @@ less (590-1) UNRELEASED; urgency=medium
   * debian/lesspipe: safeguard from possible improper delete
     (closes: #1002301)
   * refresh quilt patches
+  * update copyright notice
+  * set standards version to 4.6.0
 
   [ Adam Borowski ]
   * lesspipe: support zstd-compressed files (closes: #964930)
