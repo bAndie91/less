@@ -1,3 +1,9 @@
+less (590-1~bpo11+1) bullseye-backports; urgency=medium
+
+  * bullseye-backports rebuild (closes: #1004383)
+
+ -- Milan Kupcevic <milan@debian.org>  Wed, 26 Jan 2022 21:58:03 -0500
+
 less (590-1) sid; urgency=low
 
   [ Milan Kupcevic ]
