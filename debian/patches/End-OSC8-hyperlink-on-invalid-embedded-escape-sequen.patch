@@ -1,9 +1,10 @@
 From: Mark Nudelman <markn@greenwoodsoftware.com>
 Date: Fri, 7 Oct 2022 19:25:46 -0700
 Subject: End OSC8 hyperlink on invalid embedded escape sequence.
-Origin: https://github.com/gwsw/less/commit/a78e1351113cef564d790a730d657a321624d79c
+Origin: upstream, https://github.com/gwsw/less/commit/a78e1351113cef564d790a730d657a321624d79c
 Bug-Debian-Security: https://security-tracker.debian.org/tracker/CVE-2022-46663
 Bug-Debian: https://bugs.debian.org/1030825
+Applied-Upstream: 609
 
 ---
  line.c | 4 ++--
