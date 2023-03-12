@@ -1,3 +1,11 @@
+less (590-1.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * End OSC8 hyperlink on invalid embedded escape sequence (CVE-2022-46663)
+    (Closes: #1030825)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sun, 12 Feb 2023 11:17:35 +0100
+
 less (590-1.1) sid; urgency=medium
 
   * Non-maintainer upload
