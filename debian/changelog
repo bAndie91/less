@@ -1,3 +1,9 @@
+less (590-2) UNRELEASED; urgency=medium
+
+  * d/watch, d/upstream/signing-key.asc: check upstream release signature
+
+ -- Milan Kupcevic <milan@debian.org>  Sun, 12 Mar 2023 12:02:21 -0400
+
 less (590-1.2) unstable; urgency=medium
 
   * Non-maintainer upload.
