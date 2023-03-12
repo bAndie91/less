@@ -1,11 +1,11 @@
-less (590-2) UNRELEASED; urgency=medium
+less (590-2) sid; urgency=medium
 
   * d/control: set standards version to 4.6.2
   * d/watch, d/upstream/signing-key.asc: check upstream release signature
   * d/tests/control: add autopkgtest
   * clarify CVE-2022-46663 patch upstream status
 
- -- Milan Kupcevic <milan@debian.org>  Sun, 12 Mar 2023 12:02:21 -0400
+ -- Milan Kupcevic <milan@debian.org>  Sun, 12 Mar 2023 12:18:18 -0400
 
 less (590-1.2) unstable; urgency=medium
 
