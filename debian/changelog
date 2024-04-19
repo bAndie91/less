@@ -1,5 +1,6 @@
-less (590-3) UNRELEASED; urgency=medium
+less (590-2.1) unstable; urgency=medium
 
+  * Non-maintainer upload.
   * Shell-quote filenames when invoking LESSCLOSE (CVE-2022-48624)
     (Closes: #1064293)
   * Fix bug when viewing a file whose name contains a newline (CVE-2024-32487)
