@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1984-2021  Mark Nudelman
+ * Copyright (C) 1984-2023  Mark Nudelman
  *
  * You may distribute under the terms of either the GNU General Public
  * License or the Less License, as specified in the README file.
@@ -931,6 +931,68 @@ v587  5/27/21   Fix --with-secure; fix --file-size message on Windows;
 v588  5/27/21   Fix release.
 v589  5/29/21   Copyright & build changes.
 v590  6/3/21    Fix non-autoconf Makefiles.
+v591  8/8/21    Use \kB for backspace key in lesskey; add more \k codes;
+                handle multibyte chars in prompt.
+v592  8/24/21   Add --status-line option; limit use of /proc kludge; add --header.
+v593  8/30/21   Add header columns, --no-number-headers.
+v594  10/1/21   Let regex library handle caseless; add --redraw-on-quit option;
+                add #version to lesskey.
+v595  10/12/21  Add H color type; add += to lesskey var section; 
+                add --search-options.
+v596  11/8/21   Look for lesskey in $HOME/.config.
+v597  11/16/21  Fix bugs in --header.
+v598  12/6/21   Look for lesshst in $XDG_STATE_HOME and $HOME/.local/state.
+v599  12/28/21  Defer moving to lower left in some cases; 
+                suppress TAB expansion in some cases.
+v600  1/7/22    Use /dev/tty if cannot open ttyname().
+v601  1/31/22   Add --exit-follow-on-close option.
+v602  3/1/22    Doc changes.
+v603  3/14/22   Fix --header.
+v604  5/14/22   Fix termlib detection; fix non-ASCII input on Windows.
+v605  6/14/22   Update version number.
+v606  7/17/22   Fix bug with multibyte chars and --incsearch;
+                escape filenames in LESSCLOSE; fix bin_file overrun.
+v607  7/19/22   Update Unicode tables.
+v608  7/22/22   Fix highlighting on colored text boundaries.
+v609  11/10/22  Add LESSUTFCHARDEF; fix overstrike color bug;
+                fix procfs bug; fix signal race.
+v610  11/14/22  Update Unicode tables; fix again-search after filter;
+                improve ^X to interrupt F command.
+v611  11/16/22  Fix EOF bug related to ^X change.
+v612  11/18/22  Fix more bugs related to ^X change.
+v613  11/28/22  Even more ^X issues.
+v614  11/28/22  Add ^X to wait message.
+v615  11/30/22  Add --no-vbell option.
+v616  12/9/22   Don't open tty as input file without -f.
+v617  12/10/22  Support poll on newer versions of MacOS.
+v618  12/29/22  Add --no-search-headers option; use C89 function definitions.
+v619  12/30/22  Fix bug using 'n' before '/'.
+v620  1/12/23   Add --modelines option; add --intr option;
+                add subpattern coloring.
+v621  1/15/23   Add --wordwrap option; add LESS_LINES & LESS_COLUMNS.
+v622  1/27/23   Add --show-preproc-errors option.
+v623  2/2/23    Add # command; add ^S search modifier.
+v624  2/11/23   Add --proc-backspace, --proc-tab and --proc-return options.
+v625  2/16/23   Minor fixes.
+v626  2/19/23   Fix rare crash in add_attr_normal.
+v627  2/19/23   Doc.
+v628  2/20/23   Don't require newline after +&...
+v629  2/26/23   Delay "waiting for data" message for 500 ms.
+v630  3/18/23   Add LESS_DATA_DELAY.
+v631  3/26/23   Fix input of dead keys on Windows.
+v632  4/6/23    Make lesstest work on MacOS; minor fixes.
+v633  5/3/23    Fix build on systems with ncurses/termcap.h or ncursesw/termcap.h.
+v634  5/29/23   Allow program piping into less to access tty;
+                fix search modifier ^E after ^W.
+v635  6/2/23    Fix crash with ! search modifier.
+v636  6/18/23   Fix -D in MS-DOS build; fix mouse wheel in MS-DOS build.
+v637  6/28/23   Fix early EOF when SIGWINCH is received.
+v638  6/29/23   Fix compile error with ECHONL.
+v639  6/29/23   Fix SIGWINCH while reading tty.
+v640  7/10/23   Add lesstest to release.
+v641  7/10/23   Fix release.
+v642  7/10/23   Fix release.
+v643  7/20/23   Fix crash on Windows with -o.
 */
 
-char version[] = "590";
+char version[] = "643";

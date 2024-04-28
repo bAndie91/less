@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1984-2021  Mark Nudelman
+ * Copyright (C) 1984-2023  Mark Nudelman
  *
  * You may distribute under the terms of either the GNU General Public
  * License or the Less License, as specified in the README file.
@@ -62,18 +62,20 @@ struct linenum_info
 static struct linenum_info anchor;      /* Anchor of the list */
 static struct linenum_info *freelist;   /* Anchor of the unused entries */
 static struct linenum_info pool[NPOOL]; /* The pool itself */
-static struct linenum_info *spare;              /* We always keep one spare entry */
+static struct linenum_info *spare;      /* We always keep one spare entry */
+public int scanning_eof = FALSE;
 
 extern int linenums;
 extern int sigs;
 extern int sc_height;
 extern int screen_trashed;
+extern int header_lines;
+extern int nonum_headers;
 
 /*
  * Initialize the line number structures.
  */
-	public void
-clr_linenum(VOID_PARAM)
+public void clr_linenum(void)
 {
 	struct linenum_info *p;
 
@@ -100,9 +102,7 @@ clr_linenum(VOID_PARAM)
 /*
  * Calculate the gap for an entry.
  */
-	static void
-calcgap(p)
-	struct linenum_info *p;
+static void calcgap(struct linenum_info *p)
 {
 	/*
 	 * Don't bother to compute a gap for the anchor.
@@ -120,10 +120,7 @@ calcgap(p)
  * The specified position (pos) should be the file position of the
  * FIRST character in the specified line.
  */
-	public void
-add_lnum(linenum, pos)
-	LINENUM linenum;
-	POSITION pos;
+public void add_lnum(LINENUM linenum, POSITION pos)
 {
 	struct linenum_info *p;
 	struct linenum_info *new;
@@ -208,8 +205,7 @@ add_lnum(linenum, pos)
  * If we get stuck in a long loop trying to figure out the
  * line number, print a message to tell the user what we're doing.
  */
-	static void
-longloopmessage(VOID_PARAM)
+static void longloopmessage(void)
 {
 	ierror("Calculating line numbers", NULL_PARG);
 }
@@ -219,8 +215,7 @@ static int loopcount;
 static time_type startime;
 #endif
 
-	static void
-longish(VOID_PARAM)
+static void longish(void)
 {
 #if HAVE_TIME
 	if (loopcount >= 0 && ++loopcount > 100)
@@ -245,8 +240,7 @@ longish(VOID_PARAM)
  * Turn off line numbers because the user has interrupted
  * a lengthy line number calculation.
  */
-	static void
-abort_long(VOID_PARAM)
+static void abort_long(void)
 {
 	if (loopcount >= 0)
 		return;
@@ -263,9 +257,7 @@ abort_long(VOID_PARAM)
  * Find the line number associated with a given position.
  * Return 0 if we can't figure it out.
  */
-	public LINENUM
-find_linenum(pos)
-	POSITION pos;
+public LINENUM find_linenum(POSITION pos)
 {
 	struct linenum_info *p;
 	LINENUM linenum;
@@ -377,9 +369,7 @@ find_linenum(pos)
  * Find the position of a given line number.
  * Return NULL_POSITION if we can't figure it out.
  */
-	public POSITION
-find_pos(linenum)
-	LINENUM linenum;
+public POSITION find_pos(LINENUM linenum)
 {
 	struct linenum_info *p;
 	POSITION cpos;
@@ -450,9 +440,7 @@ find_pos(linenum)
  * The argument "where" tells which line is to be considered
  * the "current" line (e.g. TOP, BOTTOM, MIDDLE, etc).
  */
-	public LINENUM
-currline(where)
-	int where;
+public LINENUM currline(int where)
 {
 	POSITION pos;
 	POSITION len;
@@ -473,22 +461,38 @@ currline(where)
 /*
  * Scan entire file, counting line numbers.
  */
-	public void
-scan_eof(VOID_PARAM)
+public void scan_eof(void)
 {
-	POSITION pos = 0;
+	POSITION pos = ch_zero();
 	LINENUM linenum = 0;
 
 	if (ch_seek(0))
 		return;
 	ierror("Determining length of file", NULL_PARG);
+	/*
+	 * scanning_eof prevents the "Waiting for data" message from 
+	 * overwriting "Determining length of file".
+	 */
+	scanning_eof = TRUE;
 	while (pos != NULL_POSITION)
 	{
-        /* For efficiency, only add one every 256 line numbers. */
-        if ((linenum++ % 256) == 0)
-            add_lnum(linenum, pos);
+		/* For efficiency, only add one every 256 line numbers. */
+		if ((linenum++ % 256) == 0)
+			add_lnum(linenum, pos);
 		pos = forw_raw_line(pos, (char **)NULL, (int *)NULL);
 		if (ABORT_SIGS())
 			break;
 	}
+	scanning_eof = FALSE;
+}
+
+/*
+ * Return a line number adjusted for display
+ * (handles the --no-number-headers option).
+ */
+public LINENUM vlinenum(LINENUM linenum)
+{
+	if (nonum_headers)
+		linenum = (linenum < header_lines) ? 0 : linenum - header_lines;
+	return linenum;
 }
