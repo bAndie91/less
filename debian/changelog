@@ -1,3 +1,10 @@
+less (643-1) UNRELEASED; urgency=medium
+
+  * new upstream release (closes: #1069037)
+  * update copyright notice
+
+ -- Milan Kupcevic <milan@debian.org>  Sun, 28 Apr 2024 11:04:30 -0400
+
 less (590-2.1) unstable; urgency=medium
 
   * Non-maintainer upload.
