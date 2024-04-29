@@ -1,6 +1,8 @@
 less (643-1) UNRELEASED; urgency=medium
 
   * new upstream release (closes: #1069037)
+    - CVE-2022-46663 fixed in v609, drop patch
+    - CVE-2022-48624 fixed in v606, drop patch
   * update copyright notice
   * d/watch: improve version matching
 
