@@ -1,9 +1,10 @@
 From: Mark Nudelman <markn@greenwoodsoftware.com>
 Date: Thu, 11 Apr 2024 17:49:48 -0700
 Subject: Fix bug when viewing a file whose name contains a newline.
-Origin: https://github.com/gwsw/less/commit/007521ac3c95bc76e3d59c6dbfe75d06c8075c33
+Origin: upstream, https://github.com/gwsw/less/commit/007521ac3c95bc76e3d59c6dbfe75d06c8075c33
 Bug-Debian: https://bugs.debian.org/1068938
 Bug-Debian-Security: https://security-tracker.debian.org/tracker/CVE-2024-32487
+Applied-Upstream: 654
 
 ---
  filename.c | 31 +++++++++++++++++++++++++------
