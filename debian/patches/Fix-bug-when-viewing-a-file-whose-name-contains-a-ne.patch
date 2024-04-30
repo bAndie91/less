@@ -12,7 +12,7 @@ Applied-Upstream: 654
 
 --- a/filename.c
 +++ b/filename.c
-@@ -136,6 +136,15 @@ metachar(c)
+@@ -134,6 +134,15 @@
  }
  
  /*
@@ -27,8 +27,8 @@ Applied-Upstream: 654
 +/*
   * Insert a backslash before each metacharacter in a string.
   */
- 	public char *
-@@ -168,6 +177,9 @@ shell_quote(s)
+ public char * shell_quote(char *s)
+@@ -164,6 +173,9 @@
  				 * doesn't support escape chars.  Use quotes.
  				 */
  				use_quotes = 1;
@@ -38,7 +38,7 @@ Applied-Upstream: 654
  			} else
  			{
  				/*
-@@ -197,15 +209,22 @@ shell_quote(s)
+@@ -193,15 +205,22 @@
  	{
  		while (*s != '\0')
  		{
