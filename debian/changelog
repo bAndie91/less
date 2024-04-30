@@ -6,6 +6,7 @@ less (643-1) UNRELEASED; urgency=medium
   * update copyright notice
   * d/watch: improve version matching
   * drop 02-655926-more_can_go_backwards.patch, reopen #655926, tag upstream
+  * update CVE-2024-32487 patch upstream status
 
  -- Milan Kupcevic <milan@debian.org>  Sun, 28 Apr 2024 11:04:30 -0400
 
