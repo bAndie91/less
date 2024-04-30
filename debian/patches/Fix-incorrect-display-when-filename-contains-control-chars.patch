@@ -1,0 +1,86 @@
+Date:   Tue Apr 23 10:54:50 2024 -0700
+Author: Mark Nudelman <markn@greenwoodsoftware.com>
+Author: Milan Kupcevic <milan@debian.org>
+Origin: upstream, https://github.com/gwsw/less/commit/2a642a07d86f7f9484db18cd748bc521e71c997f
+Bug-Debian: https://bugs.debian.org/1069681
+Applied-Upstream: 654
+Subject: Fix incorrect display when filename contains control chars.
+
+---
+ output.c | 12 ++++++++++--
+ prompt.c | 17 ++++++++++++-----
+ 2 files changed, 22 insertions(+), 7 deletions(-)
+
+--- a/output.c
++++ b/output.c
+@@ -31,6 +31,7 @@
+ extern int screen_trashed;
+ extern int is_tty;
+ extern int oldbot;
++extern int utf_mode;
+ extern char intr_char;
+ 
+ #if MSDOS_COMPILER==WIN32C || MSDOS_COMPILER==BORLANDC || MSDOS_COMPILER==DJGPPC
+@@ -537,6 +538,7 @@
+ public int less_printf(char *fmt, PARG *parg)
+ {
+ 	char *s;
++	char *es;
+ 	int col;
+ 
+ 	col = 0;
+@@ -553,11 +555,17 @@
+ 			{
+ 			case 's':
+ 				s = parg->p_string;
++				es = s + strlen(s);
+ 				parg++;
+ 				while (*s != '\0')
+ 				{
+-					putchr(*s++);
+-					col++;
++					LWCHAR ch = step_char(&s, +1, es);
++					constant char *ps = utf_mode ? prutfchar(ch) : prchar(ch);
++					while (*ps != '\0')
++					{
++						putchr(*ps++);
++						col++;
++					}
+ 				}
+ 				break;
+ 			case 'd':
+--- a/prompt.c
++++ b/prompt.c
+@@ -30,6 +30,7 @@
+ extern int jump_sline;
+ extern int less_is_more;
+ extern int header_lines;
++extern int utf_mode;
+ extern IFILE curr_ifile;
+ #if EDITOR
+ extern char *editor;
+@@ -81,13 +82,17 @@
+  */
+ static void ap_str(char *s)
+ {
+-	int len;
+-
+-	len = (int) strlen(s);
+-	if (mp + len >= message + PROMPT_SIZE)
+-		len = (int) (message + PROMPT_SIZE - mp - 1);
+-	strncpy(mp, s, len);
+-	mp += len;
++	char *es = s + strlen(s);
++	while (*s != '\0')
++	{
++	        LWCHAR ch = step_char(&s, +1, es);
++	        constant char *ps = utf_mode ? prutfchar(ch) : prchar(ch);
++	        size_t plen = strlen(ps);
++	        if (mp + plen >= message + PROMPT_SIZE)
++	                break;
++	        strcpy(mp, ps);
++	        mp += plen;
++	}
+ 	*mp = '\0';
+ }
+ 
