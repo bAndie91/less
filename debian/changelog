@@ -1,8 +1,12 @@
-less (643-1) UNRELEASED; urgency=medium
+less (643-1) sid; urgency=medium
 
   * new upstream release (closes: #1069037)
     - CVE-2022-46663 fixed in v609, drop patch
     - CVE-2022-48624 fixed in v606, drop patch
+    - check file named "-" on stdin input (closes: #901071)
+    - integer overflow in cmd_int (closes: #977494)
+    - ctrl-c does not work with -c option (closes: #931216)
+    - at end of highlight, resend last 3 ansi sequences (closes: #1059967)
   * update copyright notice
   * d/watch: improve version matching
   * drop 02-655926-more_can_go_backwards.patch, reopen #655926, tag upstream
@@ -12,7 +16,7 @@ less (643-1) UNRELEASED; urgency=medium
   * refresh quilt patches
   * override auto test target
 
- -- Milan Kupcevic <milan@debian.org>  Sun, 28 Apr 2024 11:04:30 -0400
+ -- Milan Kupcevic <milan@debian.org>  Wed, 01 May 2024 00:29:44 -0400
 
 less (590-2.1) unstable; urgency=medium
 
