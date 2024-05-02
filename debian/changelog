@@ -1,3 +1,11 @@
+less (551-2+deb11u1) UNRELEASED; urgency=medium
+
+  [ Milan Kupcevic ]
+  * Fix incorrect display when filename contains control chars
+    (Closes: #1069681)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Thu, 02 May 2024 20:17:07 +0200
+
 less (551-2+deb11u1) bullseye-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
