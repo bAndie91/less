@@ -1,3 +1,13 @@
+less (487-0.1+deb10u1) buster-security; urgency=high
+
+  * Non-maintainer upload by the LTS Security Team.
+  * Fix CVE-2022-48624: LESSCLOSE invocation doesn't shell quote filenames.
+    Closes: #1064293
+  * Fix CVE-2024-32487: Arbitrary command execution via a newline character in
+    filenames. Closes: #1068938
+
+ -- Guilhem Moulin <guilhem@debian.org>  Mon, 27 May 2024 19:20:40 +0200
+
 less (487-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
