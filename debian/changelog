@@ -1,6 +1,7 @@
 less (668-1) UNRELEASED; urgency=medium
 
   * new upstream release
+    - CVE-2024-32487 fixed in v654, drop patches (#1068938, #1069681)
     - more can go backwards (closes: #655926)
     - fix build failure on GNU/Hurd (closes: #1060420)
     - fix incorrect handling of UTF-8 chars in prompts (closes: #1083280)
