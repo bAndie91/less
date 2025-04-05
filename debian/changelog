@@ -5,6 +5,7 @@ less (668-1) UNRELEASED; urgency=medium
     - more can go backwards (closes: #655926)
     - fix build failure on GNU/Hurd (closes: #1060420)
     - fix incorrect handling of UTF-8 chars in prompts (closes: #1083280)
+    - exit code 1 with LESSOPEN if stdin is /dev/null (closes: #1073071)
   * d/p/less-is-more-434417: update upstream patch status
 
  -- Milan Kupcevic <milan@debian.org>  Sun, 30 Mar 2025 17:21:44 -0400
