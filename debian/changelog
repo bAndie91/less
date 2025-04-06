@@ -11,6 +11,7 @@ less (668-1) UNRELEASED; urgency=medium
   * d/control: switch to debhelper 13 compatibility level
   * d/control: comply to standards version 4.7.2
   * d/copyright: update
+  * d/u/signing-key.asc: rearmor
 
  -- Milan Kupcevic <milan@debian.org>  Sun, 30 Mar 2025 17:21:44 -0400
 
