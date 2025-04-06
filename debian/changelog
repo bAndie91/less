@@ -1,4 +1,4 @@
-less (668-1) UNRELEASED; urgency=medium
+less (668-1) sid; urgency=medium
 
   * new upstream release
     - CVE-2024-32487 fixed in v654, drop patches (#1068938, #1069681)
@@ -13,7 +13,7 @@ less (668-1) UNRELEASED; urgency=medium
   * d/copyright: update
   * d/u/signing-key.asc: rearmor
 
- -- Milan Kupcevic <milan@debian.org>  Sun, 30 Mar 2025 17:21:44 -0400
+ -- Milan Kupcevic <milan@debian.org>  Sun, 06 Apr 2025 01:23:51 -0400
 
 less (643-1) sid; urgency=medium
 
