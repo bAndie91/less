@@ -10,7 +10,7 @@ Source: https://www.greenwoodsoftware.com/less/
 Upstream-Contact: Mark Nudelman <markn@greenwoodsoftware.com>
 
 Files: *
-Copyright: (C) 1984-2023  Mark Nudelman
+Copyright: (C) 1984-2024  Mark Nudelman
 License: GPL-3+ or Less
  This program is free software.  You may redistribute it and/or
  modify it under the terms of either:
@@ -23,7 +23,7 @@ License: GPL-3+ or Less
 
 Files: debian/*
 Copyright:
- 2019-2024 Milan Kupcevic <milan@debian.org>
+ 2019-2025 Milan Kupcevic <milan@debian.org>
  2006-2016 Anibal Monsalve Salazar <anibal@debian.org>
  1999-2006 Thomas Schoepf <schoepf@debian.org>
 License: GPL-3+
@@ -50,7 +50,7 @@ License: Less
                            ------------
  .
  Less
- Copyright (C) 1984-2023  Mark Nudelman
+ Copyright (C) 1984-2024  Mark Nudelman
  .
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions
@@ -74,7 +74,7 @@ License: Less
  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Files: scrsize.c
-Copyright: (C) 1984-2023  Mark Nudelman
+Copyright: (C) 1984-2024  Mark Nudelman
            (c) 1987, X Consortium
 License: GPL-3+ or Less, and X11
 
