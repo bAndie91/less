@@ -21,6 +21,7 @@ extern int sc_width, sc_height;
 extern int show_attn;
 extern int top_scroll;
 extern POSITION header_start_pos;
+extern int sticky_jump_adjust;
 
 /*
  * Jump to the end of the file.
@@ -124,11 +125,14 @@ public void repaint(void)
 	 */
 	get_scrpos(&scrpos, TOP);
 	pos_clear();
+	/* A repaint must keep every line on the row it is on. */
+	sticky_jump_adjust = 0;
 	if (scrpos.pos == NULL_POSITION)
 		/* Screen hasn't been drawn yet. */
 		jump_loc(ch_zero(), 1);
 	else
 		jump_loc(scrpos.pos, scrpos.ln);
+	sticky_jump_adjust = 1;
 }
 
 /*
@@ -233,6 +237,13 @@ public void jump_loc(POSITION pos, int sline)
 	 */
 	pos = after_header_pos(pos);
 	sindex = sindex_from_sline(sline);
+	if (sticky_jump_adjust && sticky_active())
+	{
+		/* Don't put the target under the sticky headers. */
+		int srows = sticky_rows_for(pos);
+		if (sindex < srows)
+			sindex = srows;
+	}
 
 	if ((nline = onscreen(pos)) >= 0)
 	{

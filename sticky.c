@@ -1,0 +1,510 @@
+/*
+ * Sticky headers.
+ *
+ * The user gives one regular expression per nesting level
+ * (--sticky-header=PATTERN, repeated; the first is level 1).
+ * A line belongs to the deepest level whose pattern matches it.
+ * The headers enclosing the first visible line are kept pinned at the
+ * top of the screen: level 1 on the first screen line, level 2 on the
+ * second, and so on.  A level with no enclosing header takes no row.
+ *
+ * Enclosing headers of a line L are found by scanning backward from L:
+ * a header is accepted only if its level is strictly shallower than the
+ * last accepted one; the scan ends when a level-1 header is accepted.
+ *
+ * Classified header lines are kept in a sorted index covering one
+ * contiguous region of the file, grown on demand in both directions,
+ * so scrolling by a few lines costs only the lines scrolled over.
+ */
+
+#include "less.h"
+#include "option.h"
+#include "position.h"
+
+extern int sc_width;
+extern int sc_height;
+extern int header_lines;
+extern int sigs;
+
+#define MAX_STICKY_LEVELS 16
+/* Don't look for enclosing headers further back than this many bytes. */
+#define STICKY_SCAN_LIMIT (16*1024*1024)
+/* A query this far from the indexed region starts a new region. */
+#define STICKY_REGION_GAP (256*1024)
+
+struct sticky_level
+{
+	char *text;
+	void *pat;
+};
+
+struct sticky_hdr
+{
+	POSITION pos;
+	int level;
+};
+
+static struct sticky_level levels[MAX_STICKY_LEVELS];
+static int n_levels = 0;
+static lbool compile_failed = FALSE;
+
+/*
+ * Index of header lines: a deque, sorted by position.
+ * Valid entries are hbuf[hstart] ... hbuf[hend-1].
+ */
+static struct sticky_hdr *hbuf = NULL;
+static size_t hstart = 0;
+static size_t hend = 0;
+static size_t hcap = 0;
+/* Lines whose start position is in [reg_lo, reg_hi) are classified. */
+static POSITION reg_lo = NULL_POSITION;
+static POSITION reg_hi = NULL_POSITION;
+static lbool reg_bof = FALSE;
+static POSITION scan_floor = 0;
+
+/* Number of screen rows painted by the last overlay. */
+static int last_rows = 0;
+
+public int sticky_jump_adjust = 1;
+
+#define HCOUNT()   (hend - hstart)
+#define HDR(i)     (hbuf[hstart + (i)])
+
+/*
+ * Is a sticky header configured (and usable)?
+ */
+public lbool sticky_active(void)
+{
+	return (n_levels > 0 && !compile_failed && header_lines == 0);
+}
+
+/*
+ * Forget everything we know about the file.
+ */
+public void sticky_reset(void)
+{
+	hstart = hend = hcap / 2;
+	reg_lo = reg_hi = NULL_POSITION;
+	reg_bof = FALSE;
+}
+
+static void drop_patterns(void)
+{
+	int i;
+	for (i = 0;  i < n_levels;  i++)
+	{
+		if (levels[i].pat != NULL)
+			sticky_pattern_free(levels[i].pat);
+		free(levels[i].text);
+		levels[i].pat = NULL;
+		levels[i].text = NULL;
+	}
+	n_levels = 0;
+	compile_failed = FALSE;
+}
+
+/*
+ * Compile patterns, which are set before the options like -i are final.
+ */
+static void compile_levels(void)
+{
+	int i;
+	for (i = 0;  i < n_levels;  i++)
+	{
+		if (levels[i].pat != NULL)
+			continue;
+		levels[i].pat = sticky_pattern_new(levels[i].text);
+		if (levels[i].pat == NULL)
+		{
+			/* The error was already shown.  Disable sticky headers
+			 * rather than silently shifting the levels. */
+			compile_failed = TRUE;
+			return;
+		}
+	}
+}
+
+/*
+ * Deque primitives.
+ */
+static void hgrow(lbool at_front)
+{
+	size_t n = HCOUNT();
+	size_t ncap = (hcap == 0) ? 64 : hcap * 2;
+	size_t nstart = (ncap - n) / 2;
+	struct sticky_hdr *nbuf = (struct sticky_hdr *) ecalloc(ncap, sizeof(struct sticky_hdr));
+	if (n > 0)
+		memcpy(&nbuf[nstart], &hbuf[hstart], n * sizeof(struct sticky_hdr));
+	if (hbuf != NULL)
+		free(hbuf);
+	hbuf = nbuf;
+	hcap = ncap;
+	hstart = nstart;
+	hend = nstart + n;
+	(void) at_front;
+}
+
+static void hpush_back(POSITION pos, int level)
+{
+	if (hend >= hcap)
+		hgrow(FALSE);
+	hbuf[hend].pos = pos;
+	hbuf[hend].level = level;
+	hend++;
+}
+
+static void hpush_front(POSITION pos, int level)
+{
+	if (hstart == 0)
+		hgrow(TRUE);
+	hstart--;
+	hbuf[hstart].pos = pos;
+	hbuf[hstart].level = level;
+}
+
+/*
+ * Which level does an input line belong to?  0 = not a header.
+ */
+static int classify(constant char *line, size_t line_len)
+{
+	int i;
+	for (i = n_levels-1;  i >= 0;  i--)
+	{
+		if (sticky_pattern_match(levels[i].pat, line, line_len))
+			return (i+1);
+	}
+	return (0);
+}
+
+/*
+ * Classify the line at reg_hi and extend the region over it.
+ */
+static lbool extend_fwd(void)
+{
+	constant char *line;
+	size_t line_len;
+	POSITION npos;
+	int lvl;
+
+	if (ABORT_SIGS())
+		return (FALSE);
+	npos = forw_raw_line(reg_hi, &line, &line_len);
+	if (npos == NULL_POSITION)
+		return (FALSE);
+	lvl = classify(line, line_len);
+	if (lvl > 0)
+		hpush_back(reg_hi, lvl);
+	reg_hi = npos;
+	return (TRUE);
+}
+
+/*
+ * Classify the line before reg_lo and extend the region over it.
+ */
+static lbool extend_bwd(int *plevel)
+{
+	constant char *line;
+	size_t line_len;
+	POSITION npos;
+	int lvl;
+
+	*plevel = 0;
+	if (reg_bof || reg_lo <= scan_floor)
+		return (FALSE);
+	if (ABORT_SIGS())
+		return (FALSE);
+	npos = back_raw_line(reg_lo, &line, &line_len);
+	if (npos == NULL_POSITION)
+	{
+		reg_bof = TRUE;
+		return (FALSE);
+	}
+	lvl = classify(line, line_len);
+	if (lvl > 0)
+		hpush_front(npos, lvl);
+	reg_lo = npos;
+	if (npos <= ch_zero())
+		reg_bof = TRUE;
+	*plevel = lvl;
+	return (TRUE);
+}
+
+/*
+ * Make sure the line starting at pos is inside the classified region.
+ */
+static lbool cover(POSITION pos)
+{
+	int lvl;
+
+	if (reg_lo == NULL_POSITION ||
+	    pos + STICKY_REGION_GAP < reg_lo || pos > reg_hi + STICKY_REGION_GAP)
+	{
+		sticky_reset();
+		reg_lo = reg_hi = pos;
+		reg_bof = (pos <= ch_zero());
+	}
+	while (pos >= reg_hi)
+	{
+		if (!extend_fwd())
+			return (pos < reg_hi);
+	}
+	while (pos < reg_lo)
+	{
+		if (!extend_bwd(&lvl))
+			return (pos >= reg_lo);
+	}
+	return (TRUE);
+}
+
+/*
+ * Prepend lines to the region until a header of at most maxlevel is found.
+ * Return the number of header lines added.
+ */
+static size_t extend_for(int maxlevel)
+{
+	size_t before = HCOUNT();
+	int lvl;
+
+	while (extend_bwd(&lvl))
+	{
+		if (lvl > 0 && lvl <= maxlevel)
+			break;
+	}
+	return (HCOUNT() - before);
+}
+
+/*
+ * Find the headers enclosing the line starting at pos.
+ * Fill out[] outermost first; return how many there are.
+ */
+static int stack_for(POSITION pos, struct sticky_hdr *out)
+{
+	struct sticky_hdr tmp[MAX_STICKY_LEVELS];
+	size_t lo, hi, idx;
+	long i;
+	int cur_max;
+	int nt = 0;
+	int k;
+
+	if (!sticky_active() || pos == NULL_POSITION)
+		return (0);
+	compile_levels();
+	if (compile_failed)
+		return (0);
+	scan_floor = (pos > STICKY_SCAN_LIMIT) ? pos - STICKY_SCAN_LIMIT : 0;
+	if (!cover(pos))
+		return (0);
+
+	/* idx = first indexed header at or after pos. */
+	lo = 0;
+	hi = HCOUNT();
+	while (lo < hi)
+	{
+		size_t mid = lo + (hi - lo) / 2;
+		if (HDR(mid).pos < pos)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	idx = lo;
+
+	cur_max = n_levels;
+	if (idx < HCOUNT() && HDR(idx).pos == pos)
+		cur_max = HDR(idx).level - 1;
+
+	i = (long) idx - 1;
+	while (cur_max > 0)
+	{
+		struct sticky_hdr h;
+		if (i < 0)
+		{
+			size_t added = extend_for(cur_max);
+			if (added == 0)
+				break;
+			idx += added;
+			i += (long) added;
+			continue;
+		}
+		h = HDR(i);
+		i--;
+		if (h.level <= cur_max)
+		{
+			tmp[nt++] = h;
+			cur_max = h.level - 1;
+		}
+	}
+	for (k = 0;  k < nt;  k++)
+		out[k] = tmp[nt-1-k];
+	return (nt);
+}
+
+/*
+ * The most rows we let the sticky headers take.
+ */
+static int max_rows(void)
+{
+	int m = (sc_height - 1) / 2;
+	return (m < 0 ? 0 : m);
+}
+
+/*
+ * How many sticky rows does the line at pos need?
+ */
+public int sticky_rows_for(POSITION pos)
+{
+	struct sticky_hdr st[MAX_STICKY_LEVELS];
+	int n;
+
+	if (!sticky_active())
+		return (0);
+	n = stack_for(pos, st);
+	return (n > max_rows() ? max_rows() : n);
+}
+
+/*
+ * How many rows did the last overlay take?
+ */
+public int sticky_rows_current(void)
+{
+	return (sticky_active() ? last_rows : 0);
+}
+
+/*
+ * Choose the headers to show for the current screen contents.
+ * The overlay hides the top rows, so we need the smallest k such that the
+ * headers enclosing the line at row k fit in k rows.
+ */
+static int screen_stack(struct sticky_hdr *out)
+{
+	struct sticky_hdr prev[MAX_STICKY_LEVELS];
+	int prev_n = 0;
+	int k;
+	int n = 0;
+
+	for (k = 0;  k < sc_height-1;  k++)
+	{
+		POSITION pos = position(k);
+		if (pos == NULL_POSITION)
+			break;
+		n = stack_for(pos, out);
+		if (n > max_rows())
+			n = max_rows();
+		if (n == k || (n < k && k == 0))
+			return (n);
+		if (n < k)
+		{
+			/*
+			 * The line at row k is a header which closes some of the
+			 * scopes of the line above it, so no stack fits exactly.
+			 * Keep the previous line's headers pinned (they cover rows
+			 * 0..k-1) until the new header scrolls up into their place.
+			 */
+			if (prev_n > k)
+				prev_n = k;
+			memcpy(out, prev, prev_n * sizeof(prev[0]));
+			return (prev_n);
+		}
+		memcpy(prev, out, n * sizeof(prev[0]));
+		prev_n = n;
+	}
+	return (n < k ? n : k);
+}
+
+/*
+ * Draw the sticky headers over the top rows of the screen.
+ * Return TRUE if anything was drawn.
+ */
+public int overlay_sticky(void)
+{
+	struct sticky_hdr st[MAX_STICKY_LEVELS];
+	int n;
+	int i;
+	int drew;
+
+	if (!sticky_active())
+	{
+		last_rows = 0;
+		return (FALSE);
+	}
+	n = screen_stack(st);
+	for (i = 0;  i < n;  i++)
+	{
+		forw_line_pfx(st[i].pos, sc_width - line_pfx_width(), FALSE);
+		set_attr_line(AT_COLOR_HEADER);
+		if (i == n-1)
+			set_attr_line(AT_UNDERLINE);
+		goto_line(i);
+		clear_eol();
+		put_line();
+	}
+	/*
+	 * Rows which carried headers before but not now must show their
+	 * real contents again.
+	 */
+	for (i = n;  i < last_rows;  i++)
+	{
+		POSITION pos = position(i);
+		goto_line(i);
+		clear_eol();
+		if (pos != NULL_POSITION)
+		{
+			(void) forw_line(pos);
+			put_line();
+		}
+	}
+	drew = (n > 0 || last_rows > 0);
+	last_rows = n;
+	return (drew);
+}
+
+/*
+ * Handler for the --sticky-header option.
+ * Each use adds one level.  "-" removes all levels.
+ */
+public void opt_sticky_header(int type, constant char *s)
+{
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		if (s == NULL)
+			break;
+		if (strcmp(s, "-") == 0)
+		{
+			drop_patterns();
+		} else if (n_levels >= MAX_STICKY_LEVELS)
+		{
+			error("Too many sticky header levels", NULL_PARG);
+			break;
+		} else
+		{
+			levels[n_levels].text = save(s);
+			levels[n_levels].pat = NULL;
+			n_levels++;
+			compile_failed = FALSE;
+		}
+		sticky_reset();
+		last_rows = 0;
+		break;
+	case QUERY:
+	{
+		char buf[256];
+		PARG parg;
+		int i;
+		size_t len = 0;
+
+		buf[0] = '\0';
+		for (i = 0;  i < n_levels;  i++)
+		{
+			int w = snprintf(buf + len, sizeof(buf) - len, "%s%s",
+				(i > 0) ? " > " : "", levels[i].text);
+			if (w < 0 || (size_t) w >= sizeof(buf) - len)
+				break;
+			len += (size_t) w;
+		}
+		parg.p_string = (n_levels > 0) ? buf : "none";
+		error("Sticky header levels: %s", &parg);
+		break;
+	}
+	}
+}

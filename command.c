@@ -1447,7 +1447,7 @@ public void commands(void)
 			 * Forward one screen.
 			 */
 			if (number <= 0)
-				number = get_swindow();
+				number = get_swindow_forw();
 			cmd_exec();
 			if (show_attn)
 				set_attnpos(bottompos);
@@ -1466,7 +1466,7 @@ public void commands(void)
 			 * Backward one screen.
 			 */
 			if (number <= 0)
-				number = get_swindow();
+				number = get_swindow_back();
 			cmd_exec();
 			backward((int) number, 0, 1);
 			break;
@@ -1536,7 +1536,7 @@ public void commands(void)
 			 * Force forward one screen.
 			 */
 			if (number <= 0)
-				number = get_swindow();
+				number = get_swindow_forw();
 			cmd_exec();
 			if (show_attn == OPT_ONPLUS)
 				set_attnpos(bottompos);

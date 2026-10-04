@@ -1227,3 +1227,36 @@ public int get_swindow(void)
 	return (sc_height - header_lines + swindow);
 }
 
+/*
+ * Window size for a forward page, when the first line of the next page
+ * must land just below the sticky headers which enclose it.
+ */
+public int get_swindow_forw(void)
+{
+	int w = get_swindow();
+	if (sticky_active() && w > 0 && w <= sc_height-1)
+	{
+		/* The line now at row w becomes the first line below the headers. */
+		POSITION npos = position(w);
+		w -= (npos == NULL_POSITION) ? 0 : sticky_rows_for(npos);
+		if (w < 1)
+			w = 1;
+	}
+	return (w);
+}
+
+/*
+ * Window size for a backward page.
+ */
+public int get_swindow_back(void)
+{
+	int w = get_swindow();
+	if (swindow <= 0 && sticky_active())
+	{
+		w -= sticky_rows_current();
+		if (w < 1)
+			w = 1;
+	}
+	return (w);
+}
+

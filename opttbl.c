@@ -161,6 +161,7 @@ static struct optname use_color_optname = { "use-color",         NULL };
 static struct optname want_filesize_optname = { "file-size",     NULL };
 static struct optname status_line_optname = { "status-line",     NULL };
 static struct optname header_optname = { "header",               NULL };
+static struct optname sticky_header_optname = { "sticky-header", NULL };
 static struct optname nonum_headers_optname = { "no-number-headers", NULL };
 static struct optname nosearch_headers_optname = { "no-search-headers", NULL };
 static struct optname nosearch_header_lines_optname = { "no-search-header-lines", NULL };
@@ -610,6 +611,10 @@ static struct loption option[] =
 	{ OLETTER_NONE, &header_optname,
 		STRING|REPAINT, 0, NULL, opt_header,
 		{ "Header lines: ", "d,", NULL }
+	},
+	{ OLETTER_NONE, &sticky_header_optname,
+		STRING|REPAINT, 0, NULL, opt_sticky_header,
+		{ "Sticky header pattern (- to clear): ", NULL, NULL }
 	},
 	{ OLETTER_NONE, &nonum_headers_optname,
 		BOOL|REPAINT, 0, &nonum_headers, NULL,

@@ -53,7 +53,7 @@ OBJ = \
 	line.${O} linenum.${O} \
 	lsystem.${O} mark.${O} optfunc.${O} option.${O} opttbl.${O} os.${O} \
 	output.${O} pattern.${O} position.${O} prompt.${O} search.${O} signal.${O} \
-	tags.${O} ttyin.${O} version.${O} xbuf.${O}  @REGEX_O@
+	sticky.${O} tags.${O} ttyin.${O} version.${O} xbuf.${O}  @REGEX_O@
 
 ifneq (@SECURE_COMPILE@,1)
 OBJ += lesskey_parse.${O}
