@@ -62,6 +62,10 @@ static POSITION reg_hi = NULL_POSITION;
 static lbool reg_bof = FALSE;
 static POSITION scan_floor = 0;
 
+/* Last answer of line_start(): line_start(cache_in) == cache_out. */
+static POSITION cache_in = NULL_POSITION;
+static POSITION cache_out = NULL_POSITION;
+
 /* Number of screen rows painted by the last overlay. */
 static int last_rows = 0;
 
@@ -84,6 +88,7 @@ public lbool sticky_active(void)
 public void sticky_reset(void)
 {
 	hstart = hend = hcap / 2;
+	cache_in = cache_out = NULL_POSITION;
 	reg_lo = reg_hi = NULL_POSITION;
 	reg_bof = FALSE;
 }
@@ -274,6 +279,42 @@ static size_t extend_for(int maxlevel)
 }
 
 /*
+ * The position table has one entry per screen row, so with wrapped lines
+ * a position can be in the middle of an input line.  Find the start of
+ * its line.  Positions are usually asked for in increasing order, so
+ * remember the last answer to avoid rescanning long lines.
+ */
+static POSITION line_start(POSITION pos)
+{
+	POSITION limit = (cache_in != NULL_POSITION && cache_in <= pos) ? cache_in : NULL_POSITION;
+	int c;
+
+	if (pos == NULL_POSITION || pos <= ch_zero())
+		return (pos);
+	if (ch_seek(pos) != 0)
+		return (pos);
+	if (limit == pos)
+		return (cache_out);
+	for (;;)
+	{
+		c = ch_back_get();
+		if (c == '\n' || c == EOI)
+			break;
+		if (limit != NULL_POSITION && ch_tell() <= limit)
+		{
+			/* No newline between the last position and this one. */
+			cache_in = pos;
+			return (cache_out);
+		}
+	}
+	if (c == '\n')
+		(void) ch_forw_get();
+	cache_in = pos;
+	cache_out = ch_tell();
+	return (cache_out);
+}
+
+/*
  * Find the headers enclosing the line starting at pos.
  * Fill out[] outermost first; return how many there are.
  */
@@ -288,6 +329,7 @@ static int stack_for(POSITION pos, struct sticky_hdr *out)
 
 	if (!sticky_active() || pos == NULL_POSITION)
 		return (0);
+	pos = line_start(pos);
 	compile_levels();
 	if (compile_failed)
 		return (0);
