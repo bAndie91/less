@@ -125,7 +125,7 @@ public void squish_check(void)
  * Read the first pfx columns of the next line.
  * If skipeol==0 stop there, otherwise read and discard chars to end of line.
  */
-static POSITION forw_line_pfx(POSITION pos, int pfx, int skipeol)
+public POSITION forw_line_pfx(POSITION pos, int pfx, int skipeol)
 {
 	int save_sc_width = sc_width;
 	int save_auto_wrap = auto_wrap;
@@ -197,6 +197,8 @@ public int overlay_header(void)
 		}
 		moved = TRUE;
 	}
+	if (overlay_sticky())
+		moved = TRUE;
 	if (moved)
 		lower_left();
 	return moved;
@@ -391,7 +393,7 @@ public void back(int n, POSITION pos, lbool force, lbool only_last)
 	lbool do_repaint;
 
 	squish_check();
-	do_repaint = (n > get_back_scroll() || (only_last && n > sc_height-1) || header_lines > 0);
+	do_repaint = (n > get_back_scroll() || (only_last && n > sc_height-1) || header_lines > 0 || sticky_active());
 #if HILITE_SEARCH
 	if (pos != NULL_POSITION && (hilite_search == OPT_ONPLUS || is_filtering() || status_col)) {
 		prep_hilite((pos < (POSITION) (3*size_linebuf)) ? 0 : pos - (POSITION) (3*size_linebuf), pos, -1);

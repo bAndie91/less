@@ -133,6 +133,7 @@ struct pattern_info {
 	char* text;
 	int search_type;
 	lbool is_ucase_pattern;
+	int icase;  /* is_caseless value to use when matching this pattern */
 	struct pattern_info *next;
 };
 
@@ -2411,6 +2412,80 @@ public lbool is_filtering(void)
 	return (filter_infos != NULL);
 }
 #endif
+
+/*
+ * Sticky-header support.
+ * Compile and match line patterns independently of the current
+ * search pattern and of the filters.
+ * A pattern is ignore-case under the same rules as search patterns
+ * (-I, or -i with an all-lowercase pattern).
+ */
+#define STICKY_NSP (NUM_SEARCH_COLORS+2)
+
+public void * sticky_pattern_new(constant char *text)
+{
+#if NO_REGEX
+	return (NULL);
+#else
+	struct pattern_info *info = (struct pattern_info *) ecalloc(1, sizeof(struct pattern_info));
+	int save_caseless = is_caseless;
+
+	init_pattern(info);
+	if (set_pattern(info, text, 0, 1) < 0)
+	{
+		is_caseless = save_caseless;
+		free(info);
+		return (NULL);
+	}
+	info->icase = is_caseless;
+	is_caseless = save_caseless;
+	return ((void *) info);
+#endif
+}
+
+public void sticky_pattern_free(void *vinfo)
+{
+	struct pattern_info *info = (struct pattern_info *) vinfo;
+	if (info == NULL)
+		return;
+	clear_pattern(info);
+	free(info);
+}
+
+/*
+ * Does a raw (unconverted) input line match a sticky pattern?
+ */
+public lbool sticky_pattern_match(void *vinfo, constant char *line, size_t line_len)
+{
+#if NO_REGEX
+	return (FALSE);
+#else
+	struct pattern_info *info = (struct pattern_info *) vinfo;
+	int save_caseless = is_caseless;
+	int cvt_ops;
+	size_t cvt_len;
+	char *cline;
+	int *chpos;
+	constant char *sp[STICKY_NSP];
+	constant char *ep[STICKY_NSP];
+	int matched;
+
+	if (info == NULL)
+		return (FALSE);
+	is_caseless = info->icase;
+	cvt_ops = get_cvt_ops(info->search_type);
+	cvt_len = cvt_length(line_len, cvt_ops);
+	cline = (char *) ecalloc(1, cvt_len);
+	chpos = cvt_alloc_chpos(cvt_len);
+	cvt_text(cline, line, chpos, &line_len, cvt_ops);
+	matched = match_pattern(info_compiled(info), info->text,
+		cline, line_len, sp, ep, STICKY_NSP, 0, info->search_type);
+	free(cline);
+	free(chpos);
+	is_caseless = save_caseless;
+	return (matched ? TRUE : FALSE);
+#endif
+}
 
 #if HAVE_V8_REGCOMP
 /*
