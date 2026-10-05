@@ -666,7 +666,7 @@ public int edit_ifile(IFILE ifile)
 		if (want_filesize)
 			scan_eof();
 		set_header(ch_zero());
-		sticky_reset();
+		sticky_file_opened(get_filename(ifile));
 	}
 	return (0);
 }

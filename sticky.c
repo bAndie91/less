@@ -112,7 +112,60 @@ public void sticky_reset(void)
 	reg_bof = FALSE;
 }
 
-static void drop_patterns(void)
+/*
+ * Settings come from two places: the command line (including LESS, and
+ * options given while less is running), and the preset chosen for the
+ * current file.  A preset never overrides the command line:
+ *  - if --sticky-header or --sticky-indent was given on the command line,
+ *    the preset's structure (levels or indent pattern) is not used at all;
+ *  - --sticky-skip is taken from the command line if given there.
+ * "-" on the command line is a setting too: it means "none".
+ */
+struct sticky_settings
+{
+	char *level_text[MAX_STICKY_LEVELS];
+	int n_levels;
+	lbool have_levels;
+	char *indent_text;
+	lbool have_indent;
+	char *skip_text;
+	lbool have_skip;
+};
+static struct sticky_settings cli_settings;
+static struct sticky_settings preset_settings;
+
+/* While a preset is being read, option handlers fill preset_settings. */
+public lbool sticky_loading_preset = FALSE;
+
+static void clear_levels(struct sticky_settings *st)
+{
+	int i;
+	for (i = 0;  i < st->n_levels;  i++)
+	{
+		free(st->level_text[i]);
+		st->level_text[i] = NULL;
+	}
+	st->n_levels = 0;
+}
+
+static void clear_settings(struct sticky_settings *st)
+{
+	clear_levels(st);
+	free(st->indent_text);
+	free(st->skip_text);
+	st->indent_text = st->skip_text = NULL;
+	st->have_levels = st->have_indent = st->have_skip = FALSE;
+}
+
+public void sticky_preset_clear(void)
+{
+	clear_settings(&preset_settings);
+}
+
+/*
+ * Drop the effective settings and the compiled patterns.
+ */
+static void free_effective(void)
 {
 	int i;
 	for (i = 0;  i < n_levels;  i++)
@@ -124,7 +177,38 @@ static void drop_patterns(void)
 		levels[i].text = NULL;
 	}
 	n_levels = 0;
+	if (indent_pat != NULL)
+		sticky_pattern_free(indent_pat);
+	if (skip_pat != NULL)
+		sticky_pattern_free(skip_pat);
+	indent_pat = skip_pat = NULL;
+	free(indent_text);
+	free(skip_text);
+	indent_text = skip_text = NULL;
+}
+
+/*
+ * Work out the effective settings from the command line and the preset.
+ */
+public void sticky_settings_changed(void)
+{
+	struct sticky_settings *st;
+	struct sticky_settings *sk;
+	int i;
+
+	free_effective();
+	st = (cli_settings.have_levels || cli_settings.have_indent) ? &cli_settings : &preset_settings;
+	sk = cli_settings.have_skip ? &cli_settings : &preset_settings;
+	for (i = 0;  i < st->n_levels;  i++)
+		levels[i].text = save(st->level_text[i]);
+	n_levels = st->n_levels;
+	if (st->indent_text != NULL)
+		indent_text = save(st->indent_text);
+	if (sk->skip_text != NULL)
+		skip_text = save(sk->skip_text);
 	compile_failed = FALSE;
+	sticky_reset();
+	last_rows = 0;
 }
 
 /*
@@ -643,20 +727,20 @@ public int overlay_sticky(void)
 }
 
 /*
- * Common part of the handlers of options which hold one pattern.
+ * The settings an option handler changes.
  */
-static void set_one_pattern(char **ptext, void **ppat, constant char *s)
+static struct sticky_settings * target_settings(void)
 {
-	if (*ppat != NULL)
-		sticky_pattern_free(*ppat);
-	*ppat = NULL;
-	free(*ptext);
-	*ptext = NULL;
-	if (strcmp(s, "-") != 0)
-		*ptext = save(s);
-	compile_failed = FALSE;
-	sticky_reset();
-	last_rows = 0;
+	return (sticky_loading_preset ? &preset_settings : &cli_settings);
+}
+
+static void shown(constant char *what, constant char *text)
+{
+	PARG parg;
+	char buf[256];
+	snprintf(buf, sizeof(buf), "%s: %s", what, (text != NULL) ? text : "none");
+	parg.p_string = buf;
+	error("%s", &parg);
 }
 
 /*
@@ -666,19 +750,21 @@ static void set_one_pattern(char **ptext, void **ppat, constant char *s)
  */
 public void opt_sticky_indent(int type, constant char *s)
 {
+	struct sticky_settings *st = target_settings();
 	switch (type)
 	{
 	case INIT:
 	case TOGGLE:
-		if (s != NULL)
-			set_one_pattern(&indent_text, &indent_pat, s);
+		if (s == NULL)
+			break;
+		free(st->indent_text);
+		st->indent_text = (strcmp(s, "-") != 0) ? save(s) : NULL;
+		st->have_indent = TRUE;
+		if (!sticky_loading_preset)
+			sticky_settings_changed();
 		break;
 	case QUERY:
-		{
-			PARG parg;
-			parg.p_string = (indent_text != NULL) ? indent_text : "none";
-			error("Sticky indent header pattern: %s", &parg);
-		}
+		shown("Sticky indent header pattern", indent_text);
 		break;
 	}
 }
@@ -689,19 +775,21 @@ public void opt_sticky_indent(int type, constant char *s)
  */
 public void opt_sticky_skip(int type, constant char *s)
 {
+	struct sticky_settings *st = target_settings();
 	switch (type)
 	{
 	case INIT:
 	case TOGGLE:
-		if (s != NULL)
-			set_one_pattern(&skip_text, &skip_pat, s);
+		if (s == NULL)
+			break;
+		free(st->skip_text);
+		st->skip_text = (strcmp(s, "-") != 0) ? save(s) : NULL;
+		st->have_skip = TRUE;
+		if (!sticky_loading_preset)
+			sticky_settings_changed();
 		break;
 	case QUERY:
-		{
-			PARG parg;
-			parg.p_string = (skip_text != NULL) ? skip_text : "none";
-			error("Sticky skip pattern: %s", &parg);
-		}
+		shown("Sticky skip pattern", skip_text);
 		break;
 	}
 }
@@ -712,6 +800,7 @@ public void opt_sticky_skip(int type, constant char *s)
  */
 public void opt_sticky_header(int type, constant char *s)
 {
+	struct sticky_settings *st = target_settings();
 	switch (type)
 	{
 	case INIT:
@@ -720,25 +809,22 @@ public void opt_sticky_header(int type, constant char *s)
 			break;
 		if (strcmp(s, "-") == 0)
 		{
-			drop_patterns();
-		} else if (n_levels >= MAX_STICKY_LEVELS)
+			clear_levels(st);
+		} else if (st->n_levels >= MAX_STICKY_LEVELS)
 		{
 			error("Too many sticky header levels", NULL_PARG);
 			break;
 		} else
 		{
-			levels[n_levels].text = save(s);
-			levels[n_levels].pat = NULL;
-			n_levels++;
-			compile_failed = FALSE;
+			st->level_text[st->n_levels++] = save(s);
 		}
-		sticky_reset();
-		last_rows = 0;
+		st->have_levels = TRUE;
+		if (!sticky_loading_preset)
+			sticky_settings_changed();
 		break;
 	case QUERY:
 	{
 		char buf[256];
-		PARG parg;
 		int i;
 		size_t len = 0;
 
@@ -751,8 +837,7 @@ public void opt_sticky_header(int type, constant char *s)
 				break;
 			len += (size_t) w;
 		}
-		parg.p_string = (n_levels > 0) ? buf : "none";
-		error("Sticky header levels: %s", &parg);
+		shown("Sticky header levels", (n_levels > 0) ? buf : NULL);
 		break;
 	}
 	}

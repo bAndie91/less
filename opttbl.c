@@ -161,9 +161,11 @@ static struct optname use_color_optname = { "use-color",         NULL };
 static struct optname want_filesize_optname = { "file-size",     NULL };
 static struct optname status_line_optname = { "status-line",     NULL };
 static struct optname header_optname = { "header",               NULL };
+extern int sticky_presets;
 static struct optname sticky_header_optname = { "sticky-header", NULL };
 static struct optname sticky_indent_optname = { "sticky-indent", NULL };
 static struct optname sticky_skip_optname = { "sticky-skip", NULL };
+static struct optname sticky_presets_optname = { "sticky-presets", NULL };
 static struct optname nonum_headers_optname = { "no-number-headers", NULL };
 static struct optname nosearch_headers_optname = { "no-search-headers", NULL };
 static struct optname nosearch_header_lines_optname = { "no-search-header-lines", NULL };
@@ -625,6 +627,14 @@ static struct loption option[] =
 	{ OLETTER_NONE, &sticky_skip_optname,
 		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_skip,
 		{ "Sticky: lines to ignore for indentation (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_presets_optname,
+		BOOL|REPAINT, OPT_OFF, &sticky_presets, opt_sticky_presets,
+		{
+			"Sticky header presets are not used",
+			"Sticky header presets are used",
+			NULL
+		}
 	},
 	{ OLETTER_NONE, &nonum_headers_optname,
 		BOOL|REPAINT, 0, &nonum_headers, NULL,

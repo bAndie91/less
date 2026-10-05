@@ -31,6 +31,7 @@ binprefix =
 
 sysconfdir = @sysconfdir@
 datarootdir = @datarootdir@
+datadir = @datadir@
 
 mandir = @mandir@
 manext = 1
@@ -44,7 +45,7 @@ SHELL = /bin/sh
 # This rule allows us to supply the necessary -D options
 # in addition to whatever the user asks for.
 .c.o:
-	${CC} -I. ${CFLAGS_COMPILE_ONLY} -DBINDIR=\"${bindir}\" -DSYSDIR=\"${sysconfdir}\" ${CPPFLAGS} ${CFLAGS} $<
+	${CC} -I. ${CFLAGS_COMPILE_ONLY} -DBINDIR=\"${bindir}\" -DSYSDIR=\"${sysconfdir}\" -DSTICKYPRESETS=\"${datadir}/less/lesssticky\" ${CPPFLAGS} ${CFLAGS} $<
 
 OBJ = \
 	main.${O} screen.${O} brac.${O} ch.${O} charset.${O} cmdbuf.${O} \
@@ -53,7 +54,7 @@ OBJ = \
 	line.${O} linenum.${O} \
 	lsystem.${O} mark.${O} optfunc.${O} option.${O} opttbl.${O} os.${O} \
 	output.${O} pattern.${O} position.${O} prompt.${O} search.${O} signal.${O} \
-	sticky.${O} tags.${O} ttyin.${O} version.${O} xbuf.${O}  @REGEX_O@
+	sticky.${O} stickypre.${O} tags.${O} ttyin.${O} version.${O} xbuf.${O}  @REGEX_O@
 
 ifneq (@SECURE_COMPILE@,1)
 OBJ += lesskey_parse.${O}
@@ -74,19 +75,20 @@ charset.${O}: compose.uni ubin.uni wide.uni
 
 ${OBJ}: ${srcdir}/less.h ${srcdir}/funcs.h defines.h lang.h pattern.h xbuf.h
 
-install: all ${srcdir}/less.nro ${srcdir}/lesskey.nro ${srcdir}/lessecho.nro installdirs
+install: all ${srcdir}/less.nro ${srcdir}/lesskey.nro ${srcdir}/lessecho.nro ${srcdir}/lesssticky installdirs
 	${INSTALL_PROGRAM} less$(EXEEXT) ${DESTDIR}${bindir}/${binprefix}less$(EXEEXT)
 	${INSTALL_PROGRAM} lesskey$(EXEEXT) ${DESTDIR}${bindir}/${binprefix}lesskey$(EXEEXT)
 	${INSTALL_PROGRAM} lessecho$(EXEEXT) ${DESTDIR}${bindir}/${binprefix}lessecho$(EXEEXT)
 	${INSTALL_DATA} ${srcdir}/less.nro ${DESTDIR}${mandir}/man${manext}/${manprefix}less.${manext}
 	${INSTALL_DATA} ${srcdir}/lesskey.nro ${DESTDIR}${mandir}/man${manext}/${manprefix}lesskey.${manext}
 	${INSTALL_DATA} ${srcdir}/lessecho.nro ${DESTDIR}${mandir}/man${manext}/${manprefix}lessecho.${manext}
+	${INSTALL_DATA} ${srcdir}/lesssticky ${DESTDIR}${datadir}/less/lesssticky
 
 install-strip:
 	${MAKE} INSTALL_PROGRAM='${INSTALL_PROGRAM} -s' install
 
 installdirs: mkinstalldirs
-	${srcdir}/mkinstalldirs ${DESTDIR}${bindir} ${DESTDIR}${mandir}/man${manext}
+	${srcdir}/mkinstalldirs ${DESTDIR}${bindir} ${DESTDIR}${mandir}/man${manext} ${DESTDIR}${datadir}/less
 
 uninstall:
 	rm -f ${DESTDIR}${bindir}/${binprefix}less$(EXEEXT)
@@ -95,6 +97,7 @@ uninstall:
 	rm -f ${DESTDIR}${mandir}/man${manext}/${manprefix}less.${manext}
 	rm -f ${DESTDIR}${mandir}/man${manext}/${manprefix}lesskey.${manext}
 	rm -f ${DESTDIR}${mandir}/man${manext}/${manprefix}lessecho.${manext}
+	rm -f ${DESTDIR}${datadir}/less/lesssticky
 
 info:
 install-info:
