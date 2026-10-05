@@ -472,9 +472,8 @@ public int overlay_sticky(void)
 	for (i = 0;  i < n;  i++)
 	{
 		forw_line_pfx(st[i].pos, sc_width - line_pfx_width(), FALSE);
-		set_attr_line(AT_COLOR_HEADER);
-		if (i == n-1)
-			set_attr_line(AT_UNDERLINE);
+		/* Every pinned header gets the same highlighting. */
+		set_attr_line(AT_COLOR_HEADER | AT_UNDERLINE);
 		goto_line(i);
 		clear_eol();
 		put_line();

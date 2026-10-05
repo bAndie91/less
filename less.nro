@@ -1376,7 +1376,7 @@ enclosed by a header of a shallower level is a header of the displayed text.
 The headers are shown on consecutive screen lines at the top of the screen,
 level 1 first.
 A level which has no enclosing header does not use a screen line.
-The last header line is underlined.
+All header lines are highlighted alike (underlined, and colored if \-\-use\-color is in effect).
 Header lines are never hidden by the scrolling commands:
 a line brought to the top of the screen appears just below the headers.
 At most half of the screen is used for headers.
