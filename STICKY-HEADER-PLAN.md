@@ -41,7 +41,7 @@ indentation: `indent + 1`).
 `--sticky-header=REGEX`, repeated; use *n* is level *n*.  A line belongs to the
 deepest level whose pattern matches.  `--sticky-header=-` clears the levels.
 
-## 4. Engine B: indentation (stage 1)
+## 4. Engine B: indentation (stage 1, done)
 
 A header encloses a line if it is **indented strictly less** than that line.
 No indent unit is needed, so 2/4/8 spaces, tabs and mixed styles all work.
@@ -65,6 +65,9 @@ Rules:
   itself on the first row is not its own ancestor.
 - Multi-line signatures show only their first line.
 - `--sticky-indent` takes precedence over `--sticky-header`.
+- The value of every `--sticky-*` regex option is the whole rest of the argument
+  (new `RAW_STRING` option flag), because less normally ends a string option at
+  `$`, which regexes need.
 - At most 64 nested headers are tracked; at most half of the screen is used.
 
 Typical (the repo's presets would hold these, see section 6):
@@ -148,7 +151,7 @@ For Markdown, org-mode and similar: `--sticky-level=EXPR` with
 ## 8. Stages and status
 
 - [x] A. explicit levels, overlay, paging/jump adjustments, docs, test
-- [ ] B. indentation engine (`--sticky-indent`, `--sticky-skip`), docs, tests
+- [x] B. indentation engine (`--sticky-indent`, `--sticky-skip`), docs, tests
 - [ ] C. preset file (`LESSSTICKYPRESETS`), CLI-over-preset slots
 - [ ] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`)
 - [ ] E. capture-group levels
