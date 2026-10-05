@@ -276,6 +276,13 @@ public void scan_option(constant char *s)
 			 */
 			while (*s == ' ')
 				s++;
+			if (o->otype & RAW_STRING)
+			{
+				/* The value is the whole rest of the argument. */
+				str = save(s);
+				s += strlen(s);
+				break;
+			}
 			s = optstring(s, &str, printopt, o->odesc[1]);
 			if (s == NULL)
 				return;

@@ -73,6 +73,75 @@ else:
     print('ok   clearing levels at runtime')
 l.close()
 
+# --- indentation engine
+PYSRC = """import os
+
+
+class Config:
+    def __init__(self, path):
+        self.path = path
+
+        # comment between statements
+        if path:
+            for line in open(path):
+                if line.startswith("#"):
+                    continue
+                self.parse(line)
+
+            self.loaded = True
+        else:
+            self.loaded = False
+
+    def parse(self, line):
+        key, value = line.split("=", 1)
+        while value:
+            value = value[1:]
+            if not value:
+                break
+        return key
+
+
+def main():
+    cfg = Config(1)
+    x = 1
+    print(cfg)
+
+
+main()
+"""
+pyfile = os.path.join(TMP, 'sample.py')
+open(pyfile, 'w').write(PYSRC)
+PYOPTS = r"--sticky-indent='^\s*(async\s+)?(def|class|if|elif|else|for|while|try|except|finally|with)\b' --sticky-skip='^\s*(#|$)'"
+
+def find(l, pat):
+    l.key('g'); l.text('/' + pat); l.key('Enter')
+
+l = Less(PYOPTS + ' ' + pyfile, h=14, w=70)
+find(l, 'continue')
+check('indent: five nested headers', l, ['class Config:', 'def __init__(self, path):', 'if path:',
+      'for line in open(path):', 'if line.startswith("#"):', 'continue'])
+find(l, 'key, value = ')
+check('indent: sibling scope closed', l, ['class Config:', 'def parse(self, line):', 'key, value = line.split("=", 1)'])
+find(l, 'return key')
+check('indent: loop scope ends at dedent', l, ['class Config:', 'def parse(self, line):', 'return key'])
+find(l, 'x = 1')
+check('indent: top level function only', l, ['def main():', 'x = 1'])
+find(l, 'self.loaded = False')
+check('indent: else branch is a header', l, ['class Config:', 'def __init__(self, path):', 'else:', 'self.loaded = False'])
+l.close()
+
+# tab width follows -x
+tw = os.path.join(TMP, 'tabwidth.txt')
+open(tw, 'w').write('x\n    y\n\tw\n' + '\t\tfill\n' * 40)
+l = Less("--sticky-indent=. " + tw, h=10, w=40)
+find(l, 'w')
+check('indent: tab is 8 columns by default', l, ['x', 'y', 'w'])
+l.close()
+l = Less("-x4 --sticky-indent=. " + tw, h=10, w=40)
+find(l, 'w')
+check('indent: -x4 makes a tab as wide as 4 spaces', l, ['x', 'w'])
+l.close()
+
 # --- levels without an enclosing header take no row
 l = Less(OPTS + ' ' + outline)
 l.text('/Section2'); l.key('Enter'); l.key('j', 'j', 'j', 'j', 'j', 'j')

@@ -390,6 +390,8 @@ public int sticky_rows_for(POSITION pos);
 public int sticky_rows_current(void);
 public int overlay_sticky(void);
 public void opt_sticky_header(int type, constant char *s);
+public void opt_sticky_indent(int type, constant char *s);
+public void opt_sticky_skip(int type, constant char *s);
 public int get_swindow_forw(void);
 public int get_swindow_back(void);
 public void * sticky_pattern_new(constant char *text);

@@ -1389,6 +1389,41 @@ Levels can also be added with the \-\- command while
 .B less
 is running.
 Sticky headers are not used while \-\-header lines are set.
+See also \-\-sticky\-indent.
+.RE
+.IP "\-\-sticky\-indent=\fIPATTERN\fP"
+.RS
+Like \-\-sticky\-header, but the nesting is taken from indentation, so no
+pattern per level is needed.
+A header line encloses a line if it is indented strictly less than that line,
+whatever the indentation unit is (tabs, 2 or 4 spaces, a mix).
+Only lines which match \fIPATTERN\fP can be headers;
+use "." to allow every line.
+For example, for Python source:
+.PP
+.RS
+.nf
+less \-\-sticky\-indent='^\\s*(def|class|if|elif|else|for|while|try|except|with)\\b' \-\-sticky\-skip='^\\s*(#|$)' prog.py
+.fi
+.RE
+.PP
+A tab counts up to the next tab stop (see the \-x option).
+A blank line, or a line which matches the \-\-sticky\-skip pattern,
+is never a header and does not decide what encloses itself:
+the next line which is neither of these does.
+At most 64 levels are tracked.
+\-\-sticky\-indent takes precedence over \-\-sticky\-header.
+The special form \-\-sticky\-indent=\- turns it off.
+.PP
+The value of this option, and of \-\-sticky\-header and \-\-sticky\-skip,
+is the whole rest of the argument:
+a dollar sign or backslash in it is taken literally.
+.RE
+.IP "\-\-sticky\-skip=\fIPATTERN\fP"
+.RS
+Lines matching \fIPATTERN\fP (for example comments) are ignored by
+\-\-sticky\-indent.
+The special form \-\-sticky\-skip=\- removes the pattern.
 .RE
 .IP "\-\-incsearch"
 Subsequent search commands will be "incremental"; that is,

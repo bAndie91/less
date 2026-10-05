@@ -12,6 +12,10 @@
  * a header is accepted only if its level is strictly shallower than the
  * last accepted one; the scan ends when a level-1 header is accepted.
  *
+ * With --sticky-indent the nesting is not numbered by the user: a header
+ * encloses a line if it is indented strictly less than that line, and
+ * only lines matching the given pattern are header candidates.
+ *
  * Classified header lines are kept in a sorted index covering one
  * contiguous region of the file, grown on demand in both directions,
  * so scrolling by a few lines costs only the lines scrolled over.
@@ -25,8 +29,17 @@ extern int sc_width;
 extern int sc_height;
 extern int header_lines;
 extern int sigs;
+extern int ctldisp;
+extern int tabstops[];
+extern int ntabstops;
+extern int tabdefault;
 
 #define MAX_STICKY_LEVELS 16
+/* Most headers shown at once (nesting depth in the indentation engine). */
+#define STICKY_STACK_MAX 64
+/* How far to look ahead for a line which defines the indent of a blank one. */
+#define STICKY_INDENT_LOOKAHEAD 256
+#define STICKY_INDENT_MAX 100000
 /* Don't look for enclosing headers further back than this many bytes. */
 #define STICKY_SCAN_LIMIT (16*1024*1024)
 /* A query this far from the indexed region starts a new region. */
@@ -47,6 +60,12 @@ struct sticky_hdr
 static struct sticky_level levels[MAX_STICKY_LEVELS];
 static int n_levels = 0;
 static lbool compile_failed = FALSE;
+
+/* Indentation engine (--sticky-indent, --sticky-skip). */
+static char *indent_text = NULL;
+static void *indent_pat = NULL;
+static char *skip_text = NULL;
+static void *skip_pat = NULL;
 
 /*
  * Index of header lines: a deque, sorted by position.
@@ -79,7 +98,7 @@ public int sticky_jump_adjust = 1;
  */
 public lbool sticky_active(void)
 {
-	return (n_levels > 0 && !compile_failed && header_lines == 0);
+	return ((n_levels > 0 || indent_text != NULL) && !compile_failed && header_lines == 0);
 }
 
 /*
@@ -114,6 +133,24 @@ static void drop_patterns(void)
 static void compile_levels(void)
 {
 	int i;
+	if (indent_text != NULL)
+	{
+		/* The indentation engine takes precedence over explicit levels. */
+		if (indent_pat == NULL)
+			indent_pat = sticky_pattern_new(indent_text);
+		if (indent_pat == NULL)
+		{
+			compile_failed = TRUE;
+			return;
+		}
+		if (skip_text != NULL && skip_pat == NULL)
+		{
+			skip_pat = sticky_pattern_new(skip_text);
+			if (skip_pat == NULL)
+				compile_failed = TRUE;
+		}
+		return;
+	}
 	for (i = 0;  i < n_levels;  i++)
 	{
 		if (levels[i].pat != NULL)
@@ -168,11 +205,90 @@ static void hpush_front(POSITION pos, int level)
 }
 
 /*
+ * Width of a tab at column col, following the -x tab stops.
+ */
+static int tab_width(int col)
+{
+	int to_tab = col;
+
+	if (ntabstops < 2 || to_tab >= tabstops[ntabstops-1])
+		to_tab = tabdefault - ((to_tab - tabstops[ntabstops-1]) % tabdefault);
+	else
+	{
+		int i;
+		for (i = ntabstops - 2;  i >= 0;  i--)
+			if (to_tab >= tabstops[i])
+				break;
+		to_tab = tabstops[i+1] - to_tab;
+	}
+	return (to_tab > 0 ? to_tab : 1);
+}
+
+/*
+ * Measure the indentation of a raw input line.
+ * Returns -1 if the line is blank, else the width of its leading
+ * white space in columns.
+ * With -R, leading ANSI color sequences do not count.
+ */
+static int line_indent(constant char *line, size_t line_len)
+{
+	size_t i = 0;
+	int col = 0;
+
+	while (i < line_len)
+	{
+		char c = line[i];
+		if (c == ' ')
+			col++;
+		else if (c == '\t')
+			col += tab_width(col);
+		else if (c == '\n' || c == '\r')
+			return (-1);
+		else if (ctldisp && c == '\033' && i+1 < line_len && line[i+1] == '[')
+		{
+			i += 2;
+			while (i < line_len && !(line[i] >= '@' && line[i] <= '~'))
+				i++;
+		} else
+			break;
+		if (col > STICKY_INDENT_MAX)
+			col = STICKY_INDENT_MAX;
+		i++;
+	}
+	return (i >= line_len ? -1 : col);
+}
+
+/*
+ * Is a line invisible to the indentation engine?
+ * Sets *indent to its indentation if not.
+ */
+static lbool indent_of(constant char *line, size_t line_len, int *indent)
+{
+	int ind = line_indent(line, line_len);
+	if (ind < 0)
+		return (FALSE);
+	if (skip_pat != NULL && sticky_pattern_match(skip_pat, line, line_len))
+		return (FALSE);
+	*indent = ind;
+	return (TRUE);
+}
+
+/*
  * Which level does an input line belong to?  0 = not a header.
+ * In indentation mode the level is the indentation plus one.
  */
 static int classify(constant char *line, size_t line_len)
 {
 	int i;
+	if (indent_text != NULL)
+	{
+		int ind;
+		if (!indent_of(line, line_len, &ind))
+			return (0);
+		if (!sticky_pattern_match(indent_pat, line, line_len))
+			return (0);
+		return (ind + 1);
+	}
 	for (i = n_levels-1;  i >= 0;  i--)
 	{
 		if (sticky_pattern_match(levels[i].pat, line, line_len))
@@ -315,12 +431,35 @@ static POSITION line_start(POSITION pos)
 }
 
 /*
+ * The indentation which decides what encloses the line at pos:
+ * its own, or if it is blank or skipped, that of the next real line.
+ */
+static int reference_indent(POSITION pos)
+{
+	int n;
+
+	for (n = 0;  n < STICKY_INDENT_LOOKAHEAD;  n++)
+	{
+		constant char *line;
+		size_t line_len;
+		int ind;
+		POSITION npos = forw_raw_line(pos, &line, &line_len);
+		if (npos == NULL_POSITION)
+			break;
+		if (indent_of(line, line_len, &ind))
+			return (ind);
+		pos = npos;
+	}
+	return (0);
+}
+
+/*
  * Find the headers enclosing the line starting at pos.
  * Fill out[] outermost first; return how many there are.
  */
 static int stack_for(POSITION pos, struct sticky_hdr *out)
 {
-	struct sticky_hdr tmp[MAX_STICKY_LEVELS];
+	struct sticky_hdr tmp[STICKY_STACK_MAX];
 	size_t lo, hi, idx;
 	long i;
 	int cur_max;
@@ -350,12 +489,17 @@ static int stack_for(POSITION pos, struct sticky_hdr *out)
 	}
 	idx = lo;
 
-	cur_max = n_levels;
-	if (idx < HCOUNT() && HDR(idx).pos == pos)
-		cur_max = HDR(idx).level - 1;
+	if (indent_text != NULL)
+		cur_max = reference_indent(pos);
+	else
+	{
+		cur_max = n_levels;
+		if (idx < HCOUNT() && HDR(idx).pos == pos)
+			cur_max = HDR(idx).level - 1;
+	}
 
 	i = (long) idx - 1;
-	while (cur_max > 0)
+	while (cur_max > 0 && nt < STICKY_STACK_MAX)
 	{
 		struct sticky_hdr h;
 		if (i < 0)
@@ -394,7 +538,7 @@ static int max_rows(void)
  */
 public int sticky_rows_for(POSITION pos)
 {
-	struct sticky_hdr st[MAX_STICKY_LEVELS];
+	struct sticky_hdr st[STICKY_STACK_MAX];
 	int n;
 
 	if (!sticky_active())
@@ -418,7 +562,7 @@ public int sticky_rows_current(void)
  */
 static int screen_stack(struct sticky_hdr *out)
 {
-	struct sticky_hdr prev[MAX_STICKY_LEVELS];
+	struct sticky_hdr prev[STICKY_STACK_MAX];
 	int prev_n = 0;
 	int k;
 	int n = 0;
@@ -458,7 +602,7 @@ static int screen_stack(struct sticky_hdr *out)
  */
 public int overlay_sticky(void)
 {
-	struct sticky_hdr st[MAX_STICKY_LEVELS];
+	struct sticky_hdr st[STICKY_STACK_MAX];
 	int n;
 	int i;
 	int drew;
@@ -496,6 +640,70 @@ public int overlay_sticky(void)
 	drew = (n > 0 || last_rows > 0);
 	last_rows = n;
 	return (drew);
+}
+
+/*
+ * Common part of the handlers of options which hold one pattern.
+ */
+static void set_one_pattern(char **ptext, void **ppat, constant char *s)
+{
+	if (*ppat != NULL)
+		sticky_pattern_free(*ppat);
+	*ppat = NULL;
+	free(*ptext);
+	*ptext = NULL;
+	if (strcmp(s, "-") != 0)
+		*ptext = save(s);
+	compile_failed = FALSE;
+	sticky_reset();
+	last_rows = 0;
+}
+
+/*
+ * Handler for the --sticky-indent option.
+ * The argument is the pattern of lines which may be headers;
+ * "-" turns the indentation engine off.
+ */
+public void opt_sticky_indent(int type, constant char *s)
+{
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		if (s != NULL)
+			set_one_pattern(&indent_text, &indent_pat, s);
+		break;
+	case QUERY:
+		{
+			PARG parg;
+			parg.p_string = (indent_text != NULL) ? indent_text : "none";
+			error("Sticky indent header pattern: %s", &parg);
+		}
+		break;
+	}
+}
+
+/*
+ * Handler for the --sticky-skip option: lines which the indentation engine
+ * ignores (comments etc.).  Blank lines are always ignored.
+ */
+public void opt_sticky_skip(int type, constant char *s)
+{
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		if (s != NULL)
+			set_one_pattern(&skip_text, &skip_pat, s);
+		break;
+	case QUERY:
+		{
+			PARG parg;
+			parg.p_string = (skip_text != NULL) ? skip_text : "none";
+			error("Sticky skip pattern: %s", &parg);
+		}
+		break;
+	}
 }
 
 /*

@@ -726,6 +726,8 @@ public void opt_x(int type, constant char *s)
 	case INIT:
 	case TOGGLE:
 		set_tabs(s, strlen(s));
+		/* Sticky headers measure indentation in columns. */
+		sticky_reset();
 		break;
 	case QUERY:
 		strcpy(msg, "Tab stops ");

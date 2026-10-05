@@ -24,6 +24,8 @@
 #define NO_QUERY        0400    /* Option cannot be queried with "_" cmd */
 #define INIT_HANDLER    01000   /* Call option handler function at startup */
 #define UNSUPPORTED     02000   /* Option is unsupported via LESS_UNSUPPORT */
+#define RAW_STRING      04000   /* STRING option whose value is the rest of the argument:
+                                   '$' and '\\' in it are literal (for regular expressions) */
 
 #define OTYPE           (BOOL|TRIPLE|NUMBER|STRING|NOVAR)
 
