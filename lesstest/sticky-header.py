@@ -12,9 +12,9 @@ def tmux(*a):
     return subprocess.run(('tmux',) + a, capture_output=True, text=True).stdout
 
 class Less:
-    def __init__(self, args, h=12, w=60):
+    def __init__(self, args, h=12, w=60, env=''):
         tmux('new-session', '-d', '-x', str(w), '-y', str(h), '-s', SESSION,
-             'env LESS= TERM=xterm %s %s' % (LESS, args))
+             'env LESS= TERM=xterm %s %s %s' % (env, LESS, args))
         self.settle()
     def key(self, *keys):
         for k in keys:
