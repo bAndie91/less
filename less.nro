@@ -1354,6 +1354,42 @@ When \fIC\fP is nonzero, the first \fIC\fP characters displayed at the
 beginning of each line are replaced with the first \fIC\fP characters of the line,
 even if the rest of the line is scrolled horizontally.
 .RE
+.IP "\-\-sticky\-header=\fIPATTERN\fP"
+.RS
+Keeps the headers which enclose the first displayed line pinned
+at the top of the screen, like the function and block headings
+shown by the sticky scroll feature of code editors.
+\fIPATTERN\fP is a regular expression which recognizes header lines.
+The option may be repeated; each use adds one nesting level,
+the first being level 1 (the outermost).
+For example, to follow the nesting of indented text:
+.PP
+.RS
+.nf
+less \-\-sticky\-header='^[^\\t]' \-\-sticky\-header='^\\t[^\\t]' \-\-sticky\-header='^\\t\\t[^\\t]' file
+.fi
+.RE
+.PP
+A line belongs to the deepest level whose pattern matches it.
+The nearest preceding line of each level which is not already
+enclosed by a header of a shallower level is a header of the displayed text.
+The headers are shown on consecutive screen lines at the top of the screen,
+level 1 first.
+A level which has no enclosing header does not use a screen line.
+The last header line is underlined.
+Header lines are never hidden by the scrolling commands:
+a line brought to the top of the screen appears just below the headers.
+At most half of the screen is used for headers.
+.PP
+Patterns are matched against the line as read from the file
+(after processing of backspaces and, with \-R, of ANSI sequences),
+ignoring case under the same rules as searches (\-i and \-I).
+The special form \-\-sticky\-header=\- removes all levels.
+Levels can also be added with the \-\- command while 
+.B less
+is running.
+Sticky headers are not used while \-\-header lines are set.
+.RE
 .IP "\-\-incsearch"
 Subsequent search commands will be "incremental"; that is,
 .B less
