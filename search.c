@@ -1657,26 +1657,49 @@ static int hyphen_match(constant char *cline, size_t line_len, POSITION adjacent
 		memcpy(joined + hip->keep_len, cline + hip->skip_len, line_len - hip->skip_len);
 	}
 
-	matched = match_pattern(info_compiled(&search_info), search_info.text,
-		joined, joined_len, jsp, jep, NUM_SEARCH_COLORS+2, 0, search_type);
-	if (matched && jsp[0] != NULL && jep[0] != NULL)
+	/*
+	 * Find a match that actually straddles the break.  A plain match
+	 * entirely on one side of it (e.g. a different, earlier occurrence
+	 * on cline) is not what we're looking for here -- it would already
+	 * have been found without joining -- so skip over any such matches
+	 * and keep looking, the same way hilite_line() looks for further
+	 * matches after an initial one.
+	 */
 	{
-		hip->ms = ptr_diff(jsp[0], joined);
-		hip->me = ptr_diff(jep[0], joined);
-		if (hip->ms < hip->keep_len && hip->me > hip->keep_len)
+		constant char *searchp = joined;
+		constant char *joined_end = joined + joined_len;
+		int notbol = 0;
+
+		for (;;)
 		{
-			if (search_type & SRCH_FORW)
+			matched = match_pattern(info_compiled(&search_info), search_info.text,
+				searchp, ptr_diff(joined_end, searchp), jsp, jep, NUM_SEARCH_COLORS+2, notbol, search_type);
+			if (!matched || jsp[0] == NULL || jep[0] == NULL)
+				break;
+			hip->ms = ptr_diff(jsp[0], joined);
+			hip->me = ptr_diff(jep[0], joined);
+			if (hip->ms < hip->keep_len && hip->me > hip->keep_len)
 			{
-				sp[0] = cline + hip->ms;
-				ep[0] = cline + line_len;
-			} else
-			{
-				sp[0] = cline;
-				ep[0] = cline + hip->skip_len + (hip->me - hip->keep_len);
+				if (search_type & SRCH_FORW)
+				{
+					sp[0] = cline + hip->ms;
+					ep[0] = cline + line_len;
+				} else
+				{
+					sp[0] = cline;
+					ep[0] = cline + hip->skip_len + (hip->me - hip->keep_len);
+				}
+				sp[1] = ep[1] = NULL;
+				free(joined);
+				return (1);
 			}
-			sp[1] = ep[1] = NULL;
-			free(joined);
-			return (1);
+			if (jep[0] > searchp)
+				searchp = jep[0];
+			else if (searchp != joined_end)
+				searchp++;
+			else
+				break;
+			notbol = 1;
 		}
 	}
 	free(joined);
@@ -1898,6 +1921,28 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 				line_match = hyphen_match(cline, line_len, pos, search_type, sp, ep, &hyi);
 				via_hyphen = line_match;
 			}
+#if HILITE_SEARCH
+			else if (search_type & SRCH_FIND_ALL)
+			{
+				/*
+				 * A plain match was already found on this line, but a
+				 * hyphen-joined one (using a different, unrelated part
+				 * of the line) may also end it; hilite_line()'s own
+				 * continuation search only retries plain matches, so
+				 * check for this one separately.
+				 */
+				constant char *hsp[NSP];
+				constant char *hep[NSP];
+				struct hyphen_info extra_hyi;
+				if (hyphen_match(cline, line_len, pos, search_type, hsp, hep, &extra_hyi))
+				{
+					create_hilites(linepos + skip_bytes, cline, hsp[0], hep[0],
+						AT_HILITE | AT_COLOR_SEARCH, chpos);
+					hyphen_hilite(&extra_hyi, search_type);
+					hyphen_info_free(&extra_hyi);
+				}
+			}
+#endif
 			if (line_match)
 			{
 				/*

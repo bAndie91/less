@@ -113,6 +113,24 @@ check_hilite('backward: hilite spans hyphen and whitespace on both lines', l,
              '\x1b[7mdemonstra-\x1b[0m\n\x1b[7m    tion\x1b[0m')
 l.close()
 
+# --- a plain match earlier on the line, and a hyphen-joined match
+# later on the same line/break (regression: the earlier plain match
+# used to make hilite_line() skip the later hyphen-joined one, since
+# only the first search_range() match_pattern call tried the join) ---
+dupf = os.path.join(TMP, 'dup.txt')
+open(dupf, 'w').write(
+    'intro\nESC stands for the\n'
+    'ESCAPE key; for example ESC-v means the  two  character  sequence  "ES-\n'
+    'CAPE", then "v".\nmore filler\n')
+
+l = Less(dupf, w=90)
+l.text('/ESCAPE'); l.key('Enter')
+check_found('plain + hyphen-joined match on one line: found', l)
+check_hilite('plain + hyphen-joined match on one line: both are highlighted', l,
+             '\x1b[7mESCAPE\x1b[0m key; for example ESC-v means the  two  character  sequence  "'
+             '\x1b[7mES-\x1b[0m\n\x1b[7mCAPE\x1b[0m')
+l.close()
+
 # --- word split by U+2010 HYPHEN across a line break ---
 ulines = (['intro line'] + ['filler %d' % i for i in range(3)] +
           ['this uses a hy‐', '    phen break here'] +
