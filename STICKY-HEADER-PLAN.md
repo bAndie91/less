@@ -108,39 +108,41 @@ are not understood (backward scans cannot know the lexer state); without
 `--sticky-root` a scan may reach the start of the file (cost is linear and
 cached; capped at 16 MB).
 
-## 6. Presets: options by file name (stage 2)
+## 6. Presets: options by file name or shebang (stage 2, done)
 
-No language names anywhere: a preset is just a file-name glob mapped to
-options.
+No language names anywhere: a preset is just a pattern list mapped to
+options.  Code: `stickypre.c`.
 
-- **File**: path in `$LESSSTICKYPRESETS` (fallback `~/.lesssticky`, to be
-  confirmed).  Read when a file is opened (`edit_ifile`), so `:n`, `:p`, `:e`
-  re-evaluate.  Input from a pipe has no name and gets no preset.
-- **Format**: a block starts with one or more globs on an unindented line;
-  the following indented lines are options, one per line.  The value is
-  everything after the first `=` up to the end of the line, so regexes need
-  no quoting.  `#` starts a comment line.
-
-      # presets
-      *.py
-          --sticky-indent=^\s*(async\s+)?(def|class|if|elif|else|for|while|try|except|finally|with)\b
-          --sticky-skip=^\s*(#|$)
-      *.c *.h *.go
-          --sticky-indent=^\s*(if|else|for|while|do|switch)\b|^\S.*\)\s*\{?\s*$
-      Makefile *.mk
-          --sticky-indent=^\S.*:
-
-- **Matching**: a glob is matched against the base name (against the whole
-  path if it contains `/`), `fnmatch` rules.  The **first** matching block
-  wins (alternative: apply all matching blocks in order; to be decided).
-- **Precedence**: command line (and `LESS`) beats presets.  Every sticky
-  setting has a *CLI slot* and a *preset slot*; the effective value is the CLI
-  slot if it was set, else the preset slot.  `--sticky-xxx=-` on the command
-  line is a CLI setting meaning "none" and so disables the preset's value.
-  For `--sticky-header` the list of levels is replaced as a whole.  Options
-  given interactively with `--` count as CLI.
-- Preset options are validated like normal options; errors name the preset
-  file and line.
+- **Opt-in**: `--sticky-presets` (off by default; can be toggled while less
+  runs).
+- **Files** (first matching block over all of them wins):
+  `$LESSSTICKYPRESETS` (colon-separated list; if set, only these), else
+  `~/.lesssticky`, then the installed `lesssticky` (compiled-in path
+  `${datadir}/less/lesssticky`; `make install` installs the repo's `lesssticky`
+  there, `make uninstall` removes it).
+- **Read** when a file is opened (`edit_ifile`), so `:n`, `:p`, `:e`
+  re-evaluate.
+- **Format**: a block starts with one or more patterns on an unindented line;
+  the following indented lines are `--sticky-*` options, one per line, the
+  value being everything after the first `=` (no quoting).  `#` starts a
+  comment line.
+- **Patterns**: a glob matched against the base name (the whole name if the
+  pattern contains `/`).  A pattern starting with `$` (the `$` is not part of
+  it) is a glob for the interpreter of the `#!` first line: base name of the
+  interpreter path, or if that is `env`, of the first argument of env which
+  is not an option or `NAME=value` (`-u`/`-C` and their argument are
+  skipped).  Pipes have no name but their first line is still matched.
+- **Precedence**: every setting has a command-line slot and a preset slot.
+  If `--sticky-header` or `--sticky-indent` is given on the command line (or
+  in `LESS`, or interactively), the preset's structure (levels or indent
+  pattern) is ignored as a whole; `--sticky-skip` is taken from the command
+  line if given there, else from the preset.  `-` as a value is a command-line
+  setting that means "none".  Only `--sticky-*` options with a `=VALUE` are
+  allowed in a preset (`--sticky-presets` is not).
+- **Shipped presets**: `lesssticky`, with blocks for Python, shell, Ruby, Lua,
+  Makefile, YAML, JSON, HTML/XML, C-family and JS-family curly-bracket
+  languages (by indentation), CSS, Markdown, Org, diffs, INI, LaTeX, roff and
+  Dockerfile.  POSIX regular expression syntax only.
 
 ## 7. Stage 4: levels from capture groups
 
@@ -152,7 +154,7 @@ For Markdown, org-mode and similar: `--sticky-level=EXPR` with
 
 - [x] A. explicit levels, overlay, paging/jump adjustments, docs, test
 - [x] B. indentation engine (`--sticky-indent`, `--sticky-skip`), docs, tests
-- [ ] C. preset file (`LESSSTICKYPRESETS`), CLI-over-preset slots
+- [x] C. preset file (`LESSSTICKYPRESETS`), `--sticky-presets`, shebang patterns, CLI-over-preset slots, shipped `lesssticky`, `make install`
 - [ ] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`)
 - [ ] E. capture-group levels
 - [ ] F. other makefiles, regenerate `less.man`/`less.hlp`, mouse wheel check

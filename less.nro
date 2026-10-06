@@ -1425,6 +1425,55 @@ Lines matching \fIPATTERN\fP (for example comments) are ignored by
 \-\-sticky\-indent.
 The special form \-\-sticky\-skip=\- removes the pattern.
 .RE
+.IP "\-\-sticky\-presets"
+.RS
+Use sticky header presets.
+Without this option, only sticky header options given explicitly
+are used.
+With it, when a file is opened less looks it up in the presets files
+and applies the \-\-sticky\-* options of the first block which matches it.
+Options given on the command line, in the LESS variable or while less is running
+take precedence:
+if \-\-sticky\-header or \-\-sticky\-indent is given, the structure of the preset
+(its levels or its indent pattern) is not used at all;
+\-\-sticky\-skip is taken from the preset unless it is given.
+A "\-" value, as in \-\-sticky\-indent=\-, also overrides the preset.
+.PP
+A presets file consists of blocks.
+A block starts with an unindented line of one or more patterns separated by blanks.
+The indented lines which follow are its options, one per line,
+written as on the command line (for example \-\-sticky\-indent=\fIPATTERN\fP).
+The value is everything after the first "=" up to the end of the line,
+so regular expressions are not quoted.
+Lines which start with "#", and blank lines, are comments.
+.PP
+.RS
+.nf
+# presets file
+*.py $python*
+    \-\-sticky\-indent=^[[:space:]]*(def|class|if|else|for|while)
+    \-\-sticky\-skip=^[[:space:]]*(#|$)
+.fi
+.RE
+.PP
+A pattern is a glob (* ? [...]) which is matched against the name of
+the file, its last component or, if the pattern contains a "/", the whole name.
+A pattern which starts with "$" is matched against the interpreter which
+the first line of the file ("#!...") names, and the "$" is not part of the pattern.
+The interpreter is the last component of the path on the "#!" line;
+if that is "env", it is the last component of the first argument of env
+which is not an option or an assignment.
+So after "#!/usr/bin/env /bin/bash \-e" the patterns $bash and $*sh match.
+Input from a pipe has no name, but is matched by its first line.
+.PP
+The presets files are the ones in the colon-separated list
+in the environment variable LESSSTICKYPRESETS, if it is set;
+else the file .lesssticky in the home directory and
+then the file installed with less (lesssticky, in the less directory under the
+data directory, /usr/local/share/less by default).
+The first block which matches, in the order of the files, is used.
+The installed file has presets for many programming languages and file formats.
+.RE
 .IP "\-\-incsearch"
 Subsequent search commands will be "incremental"; that is,
 .B less
@@ -2471,6 +2520,11 @@ The default is 100.
 Name of the default
 .I "lesskey source"
 file.
+.IP LESSSTICKYPRESETS
+Colon-separated list of files with sticky header presets
+(see \-\-sticky\-presets).
+If it is not set, the file .lesssticky in the home directory
+and the installed presets file are used.
 .IP LESSKEY
 Name of the default
 .I "lesskey binary"
