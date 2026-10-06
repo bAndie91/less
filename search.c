@@ -1539,6 +1539,8 @@ static int build_hyphenated_line(
 
 		while ((tail = hyphenated_tail(line, line_len)) != 0)
 		{
+			if (nextpos == NULL_POSITION)
+				break;
 			after = forw_raw_line(nextpos, &sline, &slen);
 			if (after == NULL_POSITION || slen == 0 || sline[0] != ' ')
 				break;
