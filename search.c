@@ -39,6 +39,7 @@ extern int hshift;
 extern int match_shift;
 extern int nosearch_header_lines;
 extern int nosearch_header_cols;
+extern int search_hyphenated;
 extern int header_lines;
 extern int header_cols;
 extern LWCHAR rscroll_char;
@@ -1493,6 +1494,156 @@ static void osc8_shift_visible(void)
 #endif /* OSC8_LINK */
 
 /*
+ * If search_hyphenated is set, combine lines which are joined by
+ * "hyphen + space + newline + space".
+ *
+ * The returned buffer contains the logical line with the join sequence
+ * removed.  For a forward search, *pnextpos is the position after the
+ * last physical line in the logical line.  For a backward search,
+ * *pnextpos is the position of the first physical line in the logical
+ * line (so the next search continues before this logical line).
+ */
+static int build_hyphenated_line(
+	int search_type, POSITION linepos, constant char *line, size_t line_len,
+	POSITION nextpos, char **pbuf, size_t *plen, POSITION *pnextpos)
+{
+	constant char *sline;
+	size_t slen;
+	POSITION spos;
+	size_t cap;
+	size_t n;
+	char *buf;
+	int tail;
+
+	*pbuf = NULL;
+	*plen = 0;
+
+	if (search_type & SRCH_FORW)
+	{
+		POSITION after;
+		int crossed = 0;
+
+		while ((tail = hyphenated_tail(line, line_len)) != 0)
+		{
+			after = forw_raw_line(nextpos, &sline, &slen);
+			if (after == NULL_POSITION || slen == 0 || sline[0] != ' ')
+				break;
+			if (!crossed)
+			{
+				cap = line_len + slen + 1;
+				buf = (char *) realloc(NULL, cap);
+				if (buf == NULL)
+				{
+					error("Cannot allocate memory for search", NULL_PARG);
+					return 0;
+				}
+				memcpy(buf, line, line_len - tail);
+				n = line_len - tail;
+				memcpy(buf + n, sline + 1, slen - 1);
+				n += slen - 1;
+				crossed = 1;
+			} else
+			{
+				size_t newcap = n + slen + 1;
+				char *newbuf = (char *) realloc(buf, newcap);
+				if (newbuf == NULL)
+				{
+					free(buf);
+					error("Cannot allocate memory for search", NULL_PARG);
+					return 0;
+				}
+				buf = newbuf;
+				memcpy(buf + n, sline + 1, slen - 1);
+				n += slen - 1;
+			}
+			nextpos = after;
+			line = sline;
+			line_len = slen;
+		}
+		if (!crossed)
+			return 0;
+		*plen = n;
+		*pbuf = buf;
+		*pnextpos = nextpos;
+		return 1;
+	}
+
+	/*
+	 * Backward search: if the current line is a continuation line,
+	 * prepend its hyphenated predecessor(s).
+	 */
+	if (line_len == 0 || line[0] != ' ')
+		return 0;
+
+	spos = back_raw_line(linepos, &sline, &slen);
+	if (spos == NULL_POSITION || hyphenated_tail(sline, slen) == 0)
+		return 0;
+
+	cap = line_len + slen + 1;
+	buf = (char *) realloc(NULL, cap);
+	if (buf == NULL)
+	{
+		error("Cannot allocate memory for search", NULL_PARG);
+		return 0;
+	}
+	memcpy(buf, line, line_len);
+	n = line_len;
+
+	while (line_len != 0 && line[0] == ' ')
+	{
+		tail = hyphenated_tail(sline, slen);
+		if (tail == 0)
+			break;
+
+		memmove(buf, buf + 1, n - 1);
+		n--;
+		{
+			size_t newcap = n + slen - tail + 1;
+			char *newbuf = (char *) realloc(buf, newcap);
+			if (newbuf == NULL)
+			{
+				free(buf);
+				error("Cannot allocate memory for search", NULL_PARG);
+				return 0;
+			}
+			buf = newbuf;
+			memmove(buf + slen - tail, buf, n);
+			memcpy(buf, sline, slen - tail);
+			n += slen - tail;
+		}
+		line = sline;
+		line_len = slen;
+		linepos = spos;
+		spos = back_raw_line(linepos, &sline, &slen);
+		if (spos == NULL_POSITION || line_len == 0 || line[0] != ' ')
+			break;
+	}
+
+	*plen = n;
+	*pbuf = buf;
+	*pnextpos = linepos;
+	return 1;
+}
+
+/*
+ * Return the number of bytes occupied by a supported trailing hyphen+space.
+ * U+002D HYPHEN-MINUS is two bytes here; U+2010 HYPHEN is four.
+ */
+static int hyphenated_tail(constant char *line, size_t line_len)
+{
+	if (line_len >= 2 &&
+	    line[line_len-2] == '-' && line[line_len-1] == ' ')
+		return 2;
+	if (line_len >= 4 &&
+	    (unsigned char) line[line_len-4] == 0xE2 &&
+	    (unsigned char) line[line_len-3] == 0x80 &&
+	    (unsigned char) line[line_len-2] == 0x90 &&
+	    line[line_len-1] == ' ')
+		return 4;
+	return 0;
+}
+
+/*
  * Search a subset of the file, specified by start/end position.
  */
 static int search_range(POSITION pos, POSITION endpos, int search_type, int matches, int maxlines, POSITION *plinepos, POSITION *pendpos, POSITION *plastlinepos)
@@ -1509,6 +1660,10 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 	size_t cvt_len;
 	int *chpos;
 	POSITION linepos, oldpos;
+	POSITION hyphen_linepos;
+	POSITION hyphen_nextpos;
+	char *hyphen_line = NULL;
+	size_t hyphen_line_len = 0;
 	int skip_bytes = 0;
 	size_t swidth = (size_t) (sc_width - line_pfx_width()); /*{{type-issue}}*/
 	size_t sheight = (size_t) (sc_height - sindex_from_sline(jump_sline));
@@ -1634,6 +1789,18 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 #endif
 		if (nosearch_header_cols)
 			skip_bytes = skip_columns(header_cols, &line, &line_len);
+\n		if (search_hyphenated && !(search_type & SRCH_OSC8))
+		{
+			if (build_hyphenated_line(search_type, linepos, line, line_len,
+				pos, &hyphen_line, &hyphen_line_len, &hyphen_nextpos))
+			{
+				hyphen_linepos = linepos;
+				line = hyphen_line;
+				line_len = hyphen_line_len;
+				linepos = (search_type & SRCH_BACK) ? hyphen_nextpos : linepos;
+				pos = hyphen_nextpos;
+			}
+		}
 #if OSC8_LINK
 		if (search_type & SRCH_OSC8)
 		{
@@ -1708,10 +1875,12 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 						 * the matches in this one line.
 						 */
 						clr_hilite();
-						hilite_line(linepos + skip_bytes, cline, line_len, chpos, sp, ep, NSP);
+						if (!search_hyphenated)
+							if (!search_hyphenated)
+							hilite_line(linepos + skip_bytes, cline, line_len, chpos, sp, ep, NSP);
 					}
 #endif
-					if (chop_line())
+					if (chop_line() && !search_hyphenated)
 					{
 						/*
 						 * If necessary, shift horizontally to make sure 
@@ -1742,6 +1911,8 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 					}
 					free(cline);
 					free(chpos);
+					free(hyphen_line);
+					hyphen_line = NULL;
 					if (plinepos != NULL)
 						*plinepos = linepos;
 					return (0);
@@ -1750,6 +1921,8 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 		}
 		free(cline);
 		free(chpos);
+		free(hyphen_line);
+		hyphen_line = NULL;
 	}
 }
 
