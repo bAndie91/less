@@ -1425,6 +1425,19 @@ Lines matching \fIPATTERN\fP (for example comments) are ignored by
 \-\-sticky\-indent.
 The special form \-\-sticky\-skip=\- removes the pattern.
 .RE
+.IP "\-\-sticky\-close=\fIPATTERN\fP"
+.RS
+For \-\-sticky\-indent: lines which match \fIPATTERN\fP close scopes.
+A closing line ends the scope of every header which is indented as much as
+the closing line is, or more, so the lines after it are not enclosed by those
+headers, even if they are indented deeper than the headers
+(continuation lines, here documents).
+For example, in a shell script, with \-\-sticky\-close='^[[:space:]]*(fi|done|esac)',
+a line after an if / elif / fi is not shown under the elif.
+Without this option, only headers end each other's scopes.
+Lines which do not match, such as the lines of a here document, never close a scope.
+The special form \-\-sticky\-close=\- removes the pattern.
+.RE
 .IP "\-\-sticky\-presets"
 .RS
 Use sticky header presets.

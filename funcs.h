@@ -392,6 +392,7 @@ public int overlay_sticky(void);
 public void opt_sticky_header(int type, constant char *s);
 public void opt_sticky_indent(int type, constant char *s);
 public void opt_sticky_skip(int type, constant char *s);
+public void opt_sticky_close(int type, constant char *s);
 public void opt_sticky_presets(int type, constant char *s);
 public void sticky_file_opened(constant char *filename);
 public void sticky_preset_clear(void);
