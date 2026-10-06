@@ -1789,7 +1789,8 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 #endif
 		if (nosearch_header_cols)
 			skip_bytes = skip_columns(header_cols, &line, &line_len);
-\n		if (search_hyphenated && !(search_type & SRCH_OSC8))
+
+		if (search_hyphenated && !(search_type & SRCH_OSC8))
 		{
 			if (build_hyphenated_line(search_type, linepos, line, line_len,
 				pos, &hyphen_line, &hyphen_line_len, &hyphen_nextpos))
@@ -1891,7 +1892,7 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 							size_t end_off = ptr_diff(ep[0], cline);
 							shift_visible(linepos, chpos[start_off], chpos[end_off]);
 						}
-					} else if (plastlinepos != NULL)
+					} else if (plastlinepos != NULL && !search_hyphenated)
 					{
 						/*
 						 * If the line is so long that the highlighted match
