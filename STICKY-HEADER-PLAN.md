@@ -199,7 +199,8 @@ was given there, else from the preset.  `lesssticky`: Markdown and Org use it
 - [x] C. preset file (`LESSSTICKYPRESETS`), `--sticky-presets`, shebang patterns, CLI-over-preset slots, shipped `lesssticky`, `make install`
 - [x] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`), CSS/SCSS/Less preset, tests
 - [x] E. capture-group levels (`--sticky-level`), Markdown/Org presets
-- [ ] F. other makefiles, regenerate `less.man`/`less.hlp`, mouse wheel check
+- [x] F. other makefiles, `less.hlp`/`help.c`, mouse wheel check (test added)
+- [ ] F'. regenerate `less.man` from `less.nro` (needs nroff; not available where this was written)
 
 ## 9. Testing
 
