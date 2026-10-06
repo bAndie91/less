@@ -1635,6 +1635,15 @@ and on the Windows version of
 .IP "\-\-MOUSE"
 Like \-\-mouse, except the direction scrolled
 on mouse wheel movement is reversed.
+.IP "\-\-no-hyphen-search"
+Searching normally treats a HYPHEN-MINUS (\-) or HYPHEN (U+2010),
+followed by optional whitespace, a line break, and more optional
+whitespace, as if it were not there, so that a search pattern can match
+a word which was broken across a line by hyphenation.
+Only the part of such a match which is on the current line is
+highlighted.
+This option disables that behavior, so a search pattern must match
+entirely within one line.
 .IP "\-\-no-keypad"
 Disables sending the keypad initialization and deinitialization strings
 to the terminal.
