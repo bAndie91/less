@@ -7,14 +7,22 @@ LESS = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.pat
 TMP = tempfile.mkdtemp(prefix='sticky-test-')
 SESSION = 'sticky-test-%d' % os.getpid()
 fails = 0
+KEEPALIVE = SESSION + '-keep'
+
+def start_server():
+    # Killing the last tmux session stops the tmux server, and starting
+    # the next one races with that.  Keep a dummy session alive.
+    subprocess.run(['tmux', 'new-session', '-d', '-s', KEEPALIVE, 'sleep 100000'], capture_output=True)
 
 def tmux(*a):
     return subprocess.run(('tmux',) + a, capture_output=True, text=True).stdout
 
+start_server()
+
 class Less:
     def __init__(self, args, h=12, w=60, env=''):
         tmux('new-session', '-d', '-x', str(w), '-y', str(h), '-s', SESSION,
-             'env LESS= TERM=xterm %s %s %s' % (env, LESS, args))
+             'env LESS= TERM=xterm %s %s %s 2>>%s/stderr.log; echo "exit $?" >>%s/stderr.log' % (env, LESS, args, TMP, TMP))
         self.settle()
     def key(self, *keys):
         for k in keys:
@@ -24,7 +32,15 @@ class Less:
         tmux('send-keys', '-t', SESSION, '-l', '--', s)
         self.settle()
     def settle(self):
-        time.sleep(0.25)
+        # Wait until the screen stops changing.
+        time.sleep(0.15)
+        last = None
+        for _ in range(60):
+            cur = tmux('capture-pane', '-p', '-t', SESSION)
+            if cur == last and cur.strip() != '':
+                break
+            last = cur
+            time.sleep(0.08)
     def rows(self):
         return [r.rstrip().replace('\t', ' ').strip() for r in tmux('capture-pane', '-p', '-t', SESSION).split('\n')]
     def close(self):
@@ -142,6 +158,67 @@ find(l, 'w')
 check('indent: -x4 makes a tab as wide as 4 spaces', l, ['x', 'w'])
 l.close()
 
+# --- presets
+PRESETS = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'lesssticky'))
+ENV = 'LESSSTICKYPRESETS=' + PRESETS
+FIVE = ['class Config:', 'def __init__(self, path):', 'if path:',
+        'for line in open(path):', 'if line.startswith("#"):', 'continue']
+
+def check_not(name, less, row0):
+    global fails
+    got = less.rows()[0]
+    if got == row0:
+        fails += 1; print('FAIL', name, '- row 0 is', repr(got))
+    else:
+        print('ok  ', name)
+
+l = Less(pyfile, h=14, w=70, env=ENV)
+find(l, 'continue')
+check_not('presets are off by default', l, 'class Config:')
+l.text('--sticky-presets'); l.key('Enter', 'Enter')
+find(l, 'continue')
+check('presets can be switched on while running', l, FIVE)
+l.close()
+
+l = Less('--sticky-presets ' + pyfile, h=14, w=70, env=ENV)
+find(l, 'continue')
+check('preset by file name', l, FIVE)
+l.close()
+
+l = Less('--sticky-presets --sticky-indent=- ' + pyfile, h=14, w=70, env=ENV)
+find(l, 'continue')
+check_not('command line "-" switches the preset off', l, 'class Config:')
+l.close()
+
+l = Less('--sticky-presets --sticky-header=^class ' + pyfile, h=14, w=70, env=ENV)
+find(l, 'continue')
+check('command line structure replaces the preset one', l, ['class Config:', 'continue'])
+l.close()
+
+shsrc = '#!/usr/bin/env /bin/bash -e\nf() {\n    if [ "$1" ]; then\n        for i in 1 2; do\n' + ''.join('            echo %d\n' % i for i in range(40)) + '        done\n    fi\n}\n'
+shfile = os.path.join(TMP, 'myscript')
+open(shfile, 'w').write(shsrc)
+l = Less('--sticky-presets ' + shfile, h=14, w=70, env=ENV)
+find(l, 'echo 29')
+check('shebang via env (first argument is the interpreter)', l, ['f() {', 'if [ "$1" ]; then', 'for i in 1 2; do', 'echo 29'])
+l.close()
+
+pyscript = os.path.join(TMP, 'mytool')
+open(pyscript, 'w').write('#!/usr/bin/python3\n' + PYSRC)
+l = Less('--sticky-presets ' + pyscript, h=14, w=70, env=ENV)
+find(l, 'continue')
+check('shebang with a plain interpreter path', l, FIVE)
+l.close()
+
+mine = os.path.join(TMP, 'my-presets')
+open(mine, 'w').write('# first matching block wins\n*.txt $zsh\n    --sticky-indent=.\n*.txt\n    --sticky-indent=^NEVER\n')
+nest = os.path.join(TMP, 'nest.txt')
+open(nest, 'w').write('a\n\tb\n\t\tc\n' + '\t\t\tfill\n' * 40)
+l = Less('--sticky-presets ' + nest, h=10, w=40, env='LESSSTICKYPRESETS=%s/no-such-file:%s' % (TMP, mine))
+find(l, 'fill')
+check('first matching block wins; missing files in the list are skipped', l, ['a', 'b', 'c', 'fill'])
+l.close()
+
 # --- levels without an enclosing header take no row
 l = Less(OPTS + ' ' + outline)
 l.text('/Section2'); l.key('Enter'); l.key('j', 'j', 'j', 'j', 'j', 'j')
@@ -164,5 +241,8 @@ print(('ok   ' if dt < 5 else 'FAIL ') + 'worst-case jump took %.2fs' % dt)
 fails += dt >= 5
 l.close()
 
+tmux('kill-session', '-t', KEEPALIVE)
 print('%d failure(s)' % fails)
+if fails:
+    print('less stderr and exit codes: %s/stderr.log' % TMP)
 sys.exit(1 if fails else 0)
