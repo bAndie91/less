@@ -42,6 +42,7 @@ extern int nosearch_header_cols;
 extern int header_lines;
 extern int header_cols;
 extern int multiline_search;
+extern int hyphen_search;
 extern LWCHAR rscroll_char;
 #if HILITE_SEARCH
 extern int hilite_search;
@@ -145,6 +146,13 @@ struct pattern_info {
 #endif
 	
 static struct pattern_info search_info;
+/*
+ * The pattern used to recognize a hyphenated line break, when overridden
+ * by --hyphen-regexp.  When it has no pattern set (the default), hyphen
+ * detection uses the hard-coded HYPHEN-MINUS/HYPHEN check instead; see
+ * hyphen_regexp_detect().
+ */
+static struct pattern_info hyphen_regexp_info;
 public int is_caseless;
 
 /*
@@ -224,6 +232,38 @@ static void init_pattern(struct pattern_info *info)
 public void init_search(void)
 {
 	init_pattern(&search_info);
+	init_pattern(&hyphen_regexp_info);
+}
+
+/*
+ * Set (or, with NULL or "-", clear) the regexp used to recognize a
+ * hyphenated line break for --hyphen-search.  It is wrapped as
+ * "(pattern)[ \t]*$" so it can be matched against a whole line and
+ * still only be considered a hit when it (plus optional trailing
+ * whitespace) reaches the end of the line; group 1 then delimits the
+ * hyphen-like text itself.
+ * compiling it can perturb the shared is_caseless flag (set_pattern()
+ * recomputes it from the pattern's own case), so it's saved and
+ * restored around the call to avoid affecting the main search pattern.
+ */
+public int set_hyphen_regexp(constant char *pattern)
+{
+	int save_is_caseless = is_caseless;
+	int result;
+
+	if (pattern == NULL || strcmp(pattern, "-") == 0)
+	{
+		clear_pattern(&hyphen_regexp_info);
+		result = 0;
+	} else
+	{
+		char *wrapped = (char *) ecalloc(1, strlen(pattern) + 16);
+		sprintf(wrapped, "(%s)[ \t]*$", pattern);
+		result = set_pattern(&hyphen_regexp_info, wrapped, 0, 1);
+		free(wrapped);
+	}
+	is_caseless = save_is_caseless;
+	return result;
 }
 
 /*
@@ -1566,6 +1606,38 @@ static size_t strip_trailing_hyphen(constant char *buf, size_t content_end)
 }
 
 /*
+ * Does side_a end, after optional trailing whitespace, in whatever
+ * currently counts as a hyphen?  If so, set *p_hyphen_end to the
+ * length of side_a excluding it (and the trailing whitespace) and
+ * *p_content_end to the length including it (but not the trailing
+ * whitespace), and return TRUE.
+ *
+ * If --hyphen-regexp has set a custom pattern, that is used (matched,
+ * wrapped as "(pattern)[ \t]*$", against the whole of side_a); otherwise
+ * the hard-coded HYPHEN-MINUS/HYPHEN check is used, which is cheaper
+ * since it never needs to run a regexp.
+ */
+static lbool hyphen_regexp_detect(constant char *side_a, size_t a_len,
+	size_t *p_hyphen_end, size_t *p_content_end)
+{
+	if (prev_pattern(&hyphen_regexp_info))
+	{
+		constant char *hsp[3];
+		constant char *hep[3];
+		if (!match_pattern(info_compiled(&hyphen_regexp_info), hyphen_regexp_info.text,
+				side_a, a_len, hsp, hep, 3, 0, hyphen_regexp_info.search_type) ||
+		    hsp[1] == NULL || hep[1] == NULL)
+			return FALSE;
+		*p_hyphen_end = ptr_diff(hsp[1], side_a);
+		*p_content_end = ptr_diff(hep[1], side_a);
+		return TRUE;
+	}
+	*p_content_end = strip_trailing_break_space(side_a, a_len);
+	*p_hyphen_end = strip_trailing_hyphen(side_a, *p_content_end);
+	return (*p_hyphen_end != *p_content_end);
+}
+
+/*
  * Holds the state needed to highlight the far side of a match that was
  * found by joining the line search_range() is currently processing with
  * the line adjacent to it.  Filled in by a successful multiline_match();
@@ -1659,14 +1731,21 @@ static lbool try_multiline_join(constant char *side_a, size_t a_len,
  * If the pattern doesn't match cline by itself, see if it matches when
  * cline is joined to the adjacent line (the next line, if searching
  * forward; the previous line, if searching backward) across the line
- * break between them, with any whitespace around the break collapsed:
- * whitespace* linebreak whitespace*.  Normally that collapses to a
- * single space (as if the wrapped text were one line with normal word
- * spacing), but if the break is right after a HYPHEN-MINUS or HYPHEN,
- * two things are tried instead, since there's no way to tell a genuine
- * hyphenation from two words joined with a literal hyphen: the hyphen
- * dropped (so "lorem-\nipsum" is found by "loremipsum"), and the hyphen
- * kept with no space (so it's also found by "lorem-ipsum").
+ * break between them.
+ *
+ * If --multiline-search is on and the break is not right after a
+ * hyphen (or --hyphen-search is off), any whitespace around the break
+ * collapses to a single space, as if the wrapped text were one line
+ * with normal word spacing.
+ *
+ * If --hyphen-search is on and the break is right after whatever
+ * counts as a hyphen (see hyphen_regexp_detect()), two things are
+ * tried instead, since there's no way to tell a genuine hyphenation
+ * from two words joined with a literal hyphen: the hyphen dropped (so
+ * "lorem-\nipsum" is found by "loremipsum"), and the hyphen kept with
+ * no space (so it's also found by "lorem-ipsum"). This takes priority
+ * over the plain word-wrap join for that break, whether or not
+ * --multiline-search is also on.
  *
  * adjacent_pos is the position of the adjacent line: for a forward
  * search this is the position just past cline (as left in "pos" by the
@@ -1682,10 +1761,12 @@ static lbool try_multiline_join(constant char *side_a, size_t a_len,
  * multiline_info_free() once it is done (whether or not it also calls
  * multiline_hilite()).
  * ponytail: subpattern captures aren't propagated across the break
- * (sp[1] is always cleared).  Every line that doesn't match by itself
- * now costs one extra peek+join+match of its neighbor, since any line
- * could be a wrapped continuation; add a cheaper pre-filter if that
- * ever shows up as a real slowdown on large files.
+ * (sp[1] is always cleared).  With --multiline-search on, every line
+ * that doesn't match by itself now costs one extra peek+join+match of
+ * its neighbor, since any line could be a wrapped continuation; add a
+ * cheaper pre-filter if that ever shows up as a real slowdown on large
+ * files.  (With only --hyphen-search on, a forward search still skips
+ * that cost for lines that don't end in a hyphen, same as before.)
  */
 static int multiline_match(constant char *cline, size_t line_len, POSITION adjacent_pos,
 	int search_type, constant char **sp, constant char **ep, struct multiline_info *mip)
@@ -1695,9 +1776,22 @@ static int multiline_match(constant char *cline, size_t line_len, POSITION adjac
 	constant char *side_b;
 	size_t a_len, b_len;
 	size_t content_end, hyphen_end;
+	lbool fast_path;
+	lbool have_hyphen;
 	lbool ok;
 
-	if (!multiline_search || (search_type & SRCH_NO_MATCH))
+	if ((!multiline_search && !hyphen_search) || (search_type & SRCH_NO_MATCH))
+		return (0);
+
+	/*
+	 * If only hyphen matching is active, a forward search can cheaply
+	 * rule out this line -- without paying for a peek at the next one
+	 * -- when it doesn't end in a hyphen.  (A backward search can't:
+	 * the line that might end in a hyphen is the adjacent one, not
+	 * yet read.)
+	 */
+	fast_path = !multiline_search && (search_type & SRCH_FORW);
+	if (fast_path && !hyphen_regexp_detect(cline, line_len, &hyphen_end, &content_end))
 		return (0);
 
 	if (search_type & SRCH_FORW)
@@ -1735,18 +1829,23 @@ static int multiline_match(constant char *cline, size_t line_len, POSITION adjac
 		a_len = mip->adjline_len;
 		b_len = line_len;
 	}
-	content_end = strip_trailing_break_space(side_a, a_len);
-	hyphen_end = strip_trailing_hyphen(side_a, content_end);
 	mip->skip_len = skip_break_space(side_b, b_len);
 
-	if (hyphen_end != content_end)
+	/* fast_path already ran this check on cline, which is side_a there. */
+	have_hyphen = fast_path ? TRUE :
+		(hyphen_search && hyphen_regexp_detect(side_a, a_len, &hyphen_end, &content_end));
+
+	if (have_hyphen)
 		ok = try_multiline_join(side_a, hyphen_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip) ||
 		     try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip);
-	else
+	else if (multiline_search)
 	{
 		static constant char space[1] = { ' ' };
+		content_end = strip_trailing_break_space(side_a, a_len);
 		ok = try_multiline_join(side_a, content_end, space, 1, side_b, b_len, mip->skip_len, search_type, mip);
-	}
+	} else
+		ok = FALSE;
+
 	if (!ok)
 	{
 		multiline_info_free(mip);

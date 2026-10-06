@@ -1197,6 +1197,21 @@ public void opt_nosearch_header_cols(int type, constant char *s)
 	do_nosearch_headers(type, 0, 1);
 }
 
+/*
+ * Handler for the --hyphen-regexp option.
+ */
+	/*ARGSUSED*/
+public void opt_hyphen_regexp(int type, constant char *s)
+{
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		(void) set_hyphen_regexp(s);
+		break;
+	}
+}
+
 #if LESSTEST
 /*
  * Handler for the --tty option.

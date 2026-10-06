@@ -309,6 +309,8 @@ public void opt_search_type(int type, constant char *s);
 public void opt_nosearch_headers(int type, constant char *s);
 public void opt_nosearch_header_lines(int type, constant char *s);
 public void opt_nosearch_header_cols(int type, constant char *s);
+public void opt_hyphen_regexp(int type, constant char *s);
+public int set_hyphen_regexp(constant char *pattern);
 public void opt_ttyin_name(int type, constant char *s);
 public int chop_line(void);
 public int get_swindow(void);

@@ -134,9 +134,49 @@ check_hilite('hyphen is ambiguous: literal-hyphen hilite spans both lines', l,
              '\x1b[7mlorem-\x1b[0m\n\x1b[7mipsum\x1b[0m')
 l.close()
 
+l = Less('--no-multiline-search --no-hyphen-search ' + dualf)
+l.text('/loremipsum'); l.key('Enter')
+check_not_found('--no-multiline-search --no-hyphen-search disables both joins', l)
+l.close()
+
+# --hyphen-search and --multiline-search are independent toggles.
 l = Less('--no-multiline-search ' + dualf)
 l.text('/loremipsum'); l.key('Enter')
-check_not_found('--no-multiline-search disables the hyphen case too', l)
+check_found('--no-multiline-search alone leaves hyphen-search (default on) working', l)
+l.close()
+
+l = Less('--no-hyphen-search ' + dualf)
+l.text('/loremipsum'); l.key('Enter')
+check_not_found('--no-hyphen-search disables dehyphenation even with multiline on', l)
+l.close()
+
+l = Less('--no-hyphen-search ' + dualf)
+l.text('/lorem- ipsum'); l.key('Enter')
+check_found('--no-hyphen-search still joins the break as plain word-wrap (with a space)', l)
+l.close()
+
+# --- --hyphen-regexp overrides what counts as a hyphen ---
+regexpf = os.path.join(TMP, 'regexp.txt')
+open(regexpf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'lorem~~\nipsum dolor\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(r"--hyphen-regexp='~~' " + regexpf)
+l.text('/loremipsum'); l.key('Enter')
+check_found('--hyphen-regexp: custom marker, dehyphenated form is found', l)
+check_hilite('--hyphen-regexp: custom marker hilite keeps it visible', l,
+             '\x1b[7mlorem~~\x1b[0m\n\x1b[7mipsum\x1b[0m')
+l.close()
+
+l = Less(r"--hyphen-regexp='~~' " + regexpf)
+l.text('/lorem~~ipsum'); l.key('Enter')
+check_found('--hyphen-regexp: custom marker, literal form is also found', l)
+l.close()
+
+l = Less(r"--hyphen-regexp=- " + regexpf)  # "-" resets to the default
+l.text('/loremipsum'); l.key('Enter')
+check_not_found('--hyphen-regexp=- resets to the default, so "~~" no longer counts', l)
 l.close()
 
 # --- word split by HYPHEN-MINUS ('-'), as a special case of the above
@@ -146,6 +186,11 @@ open(asciif, 'w').write(
     'intro line\nfiller 0\nfiller 1\nfiller 2\n'
     'this is a demonstra-\n    tion of something\n'
     + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(r"--hyphen-regexp='~~' --no-multiline-search " + asciif)
+l.text('/demonstration'); l.key('Enter')
+check_not_found("--hyphen-regexp: plain '-' no longer counts as a hyphen once overridden", l)
+l.close()
 
 l = Less(asciif)
 l.text('/demonstration'); l.key('Enter')

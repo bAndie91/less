@@ -1511,16 +1511,36 @@
               around it, as a single space, so a search pattern can match text
               which is split across a line by  word  wrap;  for  example  "fox
               jumps"  can  match  text wrapped as "fox" at the end of one line
-              and "jumps" at the start of the next.  If the line break instead
-              comes right after a HYPHEN-MINUS (-) or HYPHEN  (U+2010),  there
-              is  no  way  to tell a genuine hyphenation from two words joined
-              with a literal hyphen, so both are tried:  the  hyphen  dropped,
-              and the hyphen kept with no space.  For example, text wrapped as
-              "lorem-"  then  "ipsum"  is  matched  by  either "loremipsum" or
-              "lorem-ipsum".  Whichever part of such a match is on  each  line
-              is  highlighted,  including the hyphen and the whitespace around
-              the break.  This option disables all of that, so a  search  pat‐
-              tern must match entirely within one line.
+              and "jumps" at the start of the next.  (This does not apply to a
+              line break which qualifies for --hyphen-search instead; see  be‐
+              low.)   Whichever  part of such a match is on each line is high‐
+              lighted, including the whitespace around the break.  This option
+              disables that, so a search pattern must  match  entirely  within
+              one line, unless the break also qualifies for --hyphen-search.
+
+       --no-hyphen-search
+              If a line break comes right after whatever counts as a hyphen (a
+              HYPHEN-MINUS  (-)  or  HYPHEN (U+2010) by default; see --hyphen-
+              regexp), there is no way to tell a genuine hyphenation from  two
+              words  joined  with  a  literal  hyphen,  so both are tried when
+              searching: the hyphen dropped,  and  the  hyphen  kept  with  no
+              space.   For  example,  text wrapped as "lorem-" then "ipsum" is
+              matched by either "loremipsum"  or  "lorem-ipsum".   This  takes
+              priority  over --multiline-search for such a line break, whether
+              or not --multiline-search is also on.  Whichever part of such  a
+              match  is  on each line is highlighted, including the hyphen and
+              the whitespace around the break.  This option disables that,  so
+              this kind of line break is instead treated as an ordinary --mul‐
+              tiline-search break (if that is on), or not joined at all (if it
+              is not).
+
+       --hyphen-regexp
+              Changes  the  pattern  used  by  --hyphen-search  to decide what
+              counts as a hyphen at the end of a line, instead of the  default
+              HYPHEN-MINUS  or  HYPHEN.   The  pattern is a regular expression
+              which is matched as if "(pattern)[ \t]*$" were used, so it  only
+              counts when it (plus any trailing whitespace) reaches the end of
+              the line.  A "-" resets it to the default.
 
        --no-number-headers
               Header  lines (defined via the --header option) are not assigned
