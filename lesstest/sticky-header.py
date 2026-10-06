@@ -403,6 +403,38 @@ find(l, 'y3')
 check('css preset: top level rule after the @media block', l, ['.e {', 'y3: 3;'])
 l.close()
 
+# opening brace on its own line (--sticky-lead shows the line before it)
+CSS_ALLMAN = """@media screen
+{
+    .a
+    {
+        color: red;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+    }
+    .b { color: blue; }
+}
+.c
+{
+    z1: 1;
+    z2: 2;
+    z3: 3;
+    z4: 4;
+}
+""" + 'pad: 0;\n' * 20
+cssa = os.path.join(TMP, 'allman.css')
+open(cssa, 'w').write(CSS_ALLMAN)
+l = Less('--sticky-presets ' + cssa, h=10, w=50, env=ENV)
+find(l, 'margin')
+check('css preset: brace on its own line, nested', l, ['@media screen', '.a', 'margin: 0;'])
+find(l, 'z3')
+check('css preset: brace on its own line, top level', l, ['.c', 'z3: 3;'])
+l.close()
+
 # --- levels from a capture group (--sticky-level)
 MD = ("# One\n\n## Two\n\ntext\n\n### Three\n\n" + "body\n" * 3 + "\n## Four\n\n#### Five\n"
       + "deep\n" * 12 + "\n# Six\n" + "last\n" * 20)

@@ -168,16 +168,24 @@ options.  Code: `stickypre.c`.
   is not an option or `NAME=value` (`-u`/`-C` and their argument are
   skipped).  Pipes have no name but their first line is still matched.
 - **Precedence**: every setting has a command-line slot and a preset slot.
-  If `--sticky-header` or `--sticky-indent` is given on the command line (or
-  in `LESS`, or interactively), the preset's structure (levels or indent
-  pattern) is ignored as a whole; `--sticky-skip` is taken from the command
-  line if given there, else from the preset.  `-` as a value is a command-line
-  setting that means "none".  Only `--sticky-*` options with a `=VALUE` are
-  allowed in a preset (`--sticky-presets` is not).
+  The *structure* settings (`--sticky-header` levels, `--sticky-level`,
+  `--sticky-indent`, `--sticky-open`) go together: if any of them is given on
+  the command line (or in `LESS`, or interactively), the preset's structure is
+  ignored as a whole.  `--sticky-skip` and `--sticky-close` and the other
+  auxiliary patterns come from the command line if given there, else from the
+  preset (see section 5 for the rule when `--sticky-open` comes from the
+  command line).  `-` as a value is a command-line setting that means "none".
+  Only `--sticky-*` options with a `=VALUE` are allowed in a preset
+  (`--sticky-presets` is not).
 - **Shipped presets**: `lesssticky`, with blocks for Python, shell, Ruby, Lua,
   Makefile, YAML, JSON, HTML/XML, C-family and JS-family curly-bracket
-  languages (by indentation), Markdown, Org, diffs, INI, LaTeX, roff and
-  Dockerfile.  POSIX regular expression syntax only.
+  languages (by indentation, with `--sticky-close` for the closing lines),
+  CSS/SCSS/Less (counted braces, also with the opening brace on its own line
+  through `--sticky-lead=^[[:space:]]*\{`), Markdown and Org (levels from a
+  capture group), diffs, INI, LaTeX, roff and Dockerfile.  POSIX regular
+  expression syntax only.  `--sticky-lead` must match only the lines which
+  consist of the bare opening delimiter: a pattern which matches any line with
+  a brace would replace every ordinary `rule {` header by the line above it.
 
 ## 7. Stage 4: levels from capture groups (done)
 
@@ -200,7 +208,7 @@ was given there, else from the preset.  `lesssticky`: Markdown and Org use it
 - [x] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`), CSS/SCSS/Less preset, tests
 - [x] E. capture-group levels (`--sticky-level`), Markdown/Org presets
 - [x] F. other makefiles, `less.hlp`/`help.c`, mouse wheel check (test added)
-- [ ] F'. regenerate `less.man` from `less.nro` (needs nroff; not available where this was written)
+- [x] F'. regenerate `less.man` from `less.nro` (done by the maintainer; keep it in sync when `less.nro` changes)
 
 ## 9. Testing
 
