@@ -1554,6 +1554,31 @@ static size_t skip_break_space(constant char *buf, size_t len)
 }
 
 /*
+ * Holds the state needed to highlight the far side of a hyphen-joined
+ * match: the fragment on the line adjacent to the one search_range()
+ * is currently processing.  Filled in by a successful hyphen_match();
+ * the caller must eventually release it with hyphen_info_free().
+ */
+struct hyphen_info {
+	POSITION adjpos;    /* position of the adjacent line */
+	char *cadj;          /* converted text of the adjacent line */
+	int *adj_chpos;      /* chpos map for cadj, from cvt_text */
+	size_t adjline_len;  /* converted length of cadj */
+	size_t keep_len;     /* split point, on whichever side has the hyphen */
+	size_t skip_len;     /* leading-whitespace length, on the continuation side */
+	size_t ms, me;       /* match start/end offsets in the virtual joined text */
+};
+
+/*
+ * Free the buffers retained by a successful hyphen_match() call.
+ */
+static void hyphen_info_free(struct hyphen_info *hip)
+{
+	free(hip->cadj);
+	free(hip->adj_chpos);
+}
+
+/*
  * If the pattern doesn't match cline by itself, see if it matches when
  * cline is joined to the adjacent line (the next line, if searching
  * forward; the previous line, if searching backward) across a
@@ -1564,89 +1589,90 @@ static size_t skip_break_space(constant char *buf, size_t len)
  * the start of cline, since back_raw_line(linepos) reads the line
  * before it.
  *
- * Only the fragment of a cross-line match that falls on cline is
- * reported in sp[0]/ep[0]; the fragment on the adjacent line is matched
- * but not highlighted.
+ * On success, sp[0]/ep[0] delimit the part of the match that is on
+ * cline, extended to include the hyphen and the whitespace around the
+ * break on this side of it, and *hip is filled in so hyphen_hilite()
+ * can highlight the rest of the match (including the break's
+ * whitespace) on the adjacent line.  The caller must release *hip with
+ * hyphen_info_free() once it is done (whether or not it also calls
+ * hyphen_hilite()).
  * ponytail: subpattern captures aren't propagated across the break
- * (sp[1] is always cleared); teach this to emit a second hilite range
- * on the adjacent line if the single-sided highlight proves confusing.
+ * (sp[1] is always cleared).
  */
 static int hyphen_match(constant char *cline, size_t line_len, POSITION adjacent_pos,
-	int search_type, constant char **sp, constant char **ep)
+	int search_type, constant char **sp, constant char **ep, struct hyphen_info *hip)
 {
 	constant char *adjline;
-	size_t adjline_len;
-	char *cadj;
-	size_t keep_len, skip_len;
 	char *joined;
 	size_t joined_len;
 	constant char *jsp[NUM_SEARCH_COLORS+2];
 	constant char *jep[NUM_SEARCH_COLORS+2];
 	int matched;
-	size_t ms, me;
 
 	if (!hyphen_search || (search_type & SRCH_NO_MATCH))
 		return (0);
 
 	if (search_type & SRCH_FORW)
 	{
-		keep_len = hyphen_break_len(cline, line_len);
-		if (keep_len == (size_t) -1)
+		hip->keep_len = hyphen_break_len(cline, line_len);
+		if (hip->keep_len == (size_t) -1)
 			return (0);
-		if (forw_raw_line(adjacent_pos, &adjline, &adjline_len) == NULL_POSITION)
+		if (forw_raw_line(adjacent_pos, &adjline, &hip->adjline_len) == NULL_POSITION)
 			return (0);
+		hip->adjpos = adjacent_pos;
 	} else
 	{
-		if (back_raw_line(adjacent_pos, &adjline, &adjline_len) == NULL_POSITION)
+		hip->adjpos = back_raw_line(adjacent_pos, &adjline, &hip->adjline_len);
+		if (hip->adjpos == NULL_POSITION)
 			return (0);
 	}
 
 	{
 		int cvt_ops = get_cvt_ops(search_type);
-		size_t cvt_len = cvt_length(adjline_len, cvt_ops);
-		cadj = (char *) ecalloc(1, cvt_len);
-		cvt_text(cadj, adjline, NULL, &adjline_len, cvt_ops);
+		size_t cvt_len = cvt_length(hip->adjline_len, cvt_ops);
+		hip->cadj = (char *) ecalloc(1, cvt_len);
+		hip->adj_chpos = cvt_alloc_chpos(cvt_len);
+		cvt_text(hip->cadj, adjline, hip->adj_chpos, &hip->adjline_len, cvt_ops);
 	}
 
 	if (search_type & SRCH_FORW)
 	{
-		skip_len = skip_break_space(cadj, adjline_len);
-		joined_len = keep_len + (adjline_len - skip_len);
+		hip->skip_len = skip_break_space(hip->cadj, hip->adjline_len);
+		joined_len = hip->keep_len + (hip->adjline_len - hip->skip_len);
 		joined = (char *) ecalloc(1, joined_len + 1);
-		memcpy(joined, cline, keep_len);
-		memcpy(joined + keep_len, cadj + skip_len, adjline_len - skip_len);
+		memcpy(joined, cline, hip->keep_len);
+		memcpy(joined + hip->keep_len, hip->cadj + hip->skip_len, hip->adjline_len - hip->skip_len);
 	} else
 	{
-		keep_len = hyphen_break_len(cadj, adjline_len);
-		if (keep_len == (size_t) -1)
+		hip->keep_len = hyphen_break_len(hip->cadj, hip->adjline_len);
+		if (hip->keep_len == (size_t) -1)
 		{
-			free(cadj);
+			hyphen_info_free(hip);
 			return (0);
 		}
-		skip_len = skip_break_space(cline, line_len);
-		joined_len = keep_len + (line_len - skip_len);
+		hip->skip_len = skip_break_space(cline, line_len);
+		joined_len = hip->keep_len + (line_len - hip->skip_len);
 		joined = (char *) ecalloc(1, joined_len + 1);
-		memcpy(joined, cadj, keep_len);
-		memcpy(joined + keep_len, cline + skip_len, line_len - skip_len);
+		memcpy(joined, hip->cadj, hip->keep_len);
+		memcpy(joined + hip->keep_len, cline + hip->skip_len, line_len - hip->skip_len);
 	}
-	free(cadj);
 
 	matched = match_pattern(info_compiled(&search_info), search_info.text,
 		joined, joined_len, jsp, jep, NUM_SEARCH_COLORS+2, 0, search_type);
 	if (matched && jsp[0] != NULL && jep[0] != NULL)
 	{
-		ms = ptr_diff(jsp[0], joined);
-		me = ptr_diff(jep[0], joined);
-		if (ms < keep_len && me > keep_len)
+		hip->ms = ptr_diff(jsp[0], joined);
+		hip->me = ptr_diff(jep[0], joined);
+		if (hip->ms < hip->keep_len && hip->me > hip->keep_len)
 		{
 			if (search_type & SRCH_FORW)
 			{
-				sp[0] = cline + ms;
-				ep[0] = cline + keep_len;
+				sp[0] = cline + hip->ms;
+				ep[0] = cline + line_len;
 			} else
 			{
-				sp[0] = cline + skip_len;
-				ep[0] = cline + skip_len + (me - keep_len);
+				sp[0] = cline;
+				ep[0] = cline + hip->skip_len + (hip->me - hip->keep_len);
 			}
 			sp[1] = ep[1] = NULL;
 			free(joined);
@@ -1654,8 +1680,28 @@ static int hyphen_match(constant char *cline, size_t line_len, POSITION adjacent
 		}
 	}
 	free(joined);
+	hyphen_info_free(hip);
 	return (0);
 }
+
+#if HILITE_SEARCH
+/*
+ * Highlight the part of a hyphen-joined match that falls on the
+ * adjacent line.  (The part on cline itself is highlighted the normal
+ * way, via the sp[0]/ep[0] that hyphen_match() set.)
+ */
+static void hyphen_hilite(constant struct hyphen_info *hip, int search_type)
+{
+	if (search_type & SRCH_FORW)
+		create_hilites(hip->adjpos, hip->cadj, hip->cadj,
+			hip->cadj + hip->skip_len + (hip->me - hip->keep_len),
+			AT_HILITE | AT_COLOR_SEARCH, hip->adj_chpos);
+	else
+		create_hilites(hip->adjpos, hip->cadj, hip->cadj + hip->ms,
+			hip->cadj + hip->adjline_len,
+			AT_HILITE | AT_COLOR_SEARCH, hip->adj_chpos);
+}
+#endif
 
 /*
  * Search a subset of the file, specified by start/end position.
@@ -1670,6 +1716,8 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 	constant char *sp[NSP];
 	constant char *ep[NSP];
 	int line_match;
+	lbool via_hyphen;
+	struct hyphen_info hyi;
 	int cvt_ops;
 	size_t cvt_len;
 	int *chpos;
@@ -1844,8 +1892,12 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 		{
 			line_match = match_pattern(info_compiled(&search_info), search_info.text,
 				cline, line_len, sp, ep, NSP, 0, search_type);
+			via_hyphen = FALSE;
 			if (!line_match)
-				line_match = hyphen_match(cline, line_len, pos, search_type, sp, ep);
+			{
+				line_match = hyphen_match(cline, line_len, pos, search_type, sp, ep, &hyi);
+				via_hyphen = line_match;
+			}
 			if (line_match)
 			{
 				/*
@@ -1856,10 +1908,12 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 #if HILITE_SEARCH
 					/*
 					 * We are supposed to find all matches in the range.
-					 * Just add the matches in this line to the 
+					 * Just add the matches in this line to the
 					 * hilite list and keep searching.
 					 */
 					hilite_line(linepos + skip_bytes, cline, line_len, chpos, sp, ep, NSP);
+					if (via_hyphen)
+						hyphen_hilite(&hyi, search_type);
 #endif
 				} else if (--matches <= 0)
 				{
@@ -1876,6 +1930,8 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 						 */
 						clr_hilite();
 						hilite_line(linepos + skip_bytes, cline, line_len, chpos, sp, ep, NSP);
+						if (via_hyphen)
+							hyphen_hilite(&hyi, search_type);
 					}
 #endif
 					if (chop_line())
@@ -1907,12 +1963,16 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 								*plastlinepos = get_lastlinepos(linepos, linepos + chpos[end_off], (int) sheight);
 						}
 					}
+					if (via_hyphen)
+						hyphen_info_free(&hyi);
 					free(cline);
 					free(chpos);
 					if (plinepos != NULL)
 						*plinepos = linepos;
 					return (0);
 				}
+				if (via_hyphen)
+					hyphen_info_free(&hyi);
 			}
 		}
 		free(cline);

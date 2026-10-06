@@ -44,6 +44,9 @@ class Less:
             time.sleep(0.08)
     def rows(self):
         return [r.rstrip().replace('\t', ' ').strip() for r in tmux('capture-pane', '-p', '-t', SESSION).split('\n')]
+    def raw(self):
+        # Pane contents with SGR escapes kept in, to check highlight spans.
+        return tmux('capture-pane', '-e', '-p', '-t', SESSION)
     def close(self):
         tmux('kill-session', '-t', SESSION)
 
@@ -69,6 +72,19 @@ def check_not_found(name, less):
         fails += 1
         print('FAIL', name, '(expected "Pattern not found")'); print('  rows', rows)
 
+# The whole hit should be highlighted on both sides of the break, including
+# the hyphen and the whitespace around it: "demonstra-" fully reversed on
+# one line, "    tion" (leading whitespace included) fully reversed on the
+# next.
+def check_hilite(name, less, expected):
+    global fails
+    text = less.raw()
+    if expected in text:
+        print('ok  ', name)
+    else:
+        fails += 1
+        print('FAIL', name); print('  expected', repr(expected)); print('  got', repr(text))
+
 # --- word split by HYPHEN-MINUS ('-') across a line break ---
 lines = (['intro line'] + ['filler %d' % i for i in range(3)] +
          ['this is a demonstra-', '    tion of something'] +
@@ -79,6 +95,8 @@ open(asciif, 'w').write('\n'.join(lines) + '\n')
 l = Less(asciif)
 l.text('/demonstration'); l.key('Enter')
 check_found('forward: word split by hyphen-minus is found', l)
+check_hilite('forward: hilite spans hyphen and whitespace on both lines', l,
+             '\x1b[7mdemonstra-\x1b[0m\n\x1b[7m    tion\x1b[0m')
 l.close()
 
 l = Less('--no-hyphen-search ' + asciif)
@@ -90,6 +108,9 @@ l = Less(asciif)
 l.key('G')
 l.text('?demonstration'); l.key('Enter')
 check_found('backward: word split by hyphen-minus is found', l)
+l.key('k')  # scroll the hyphen side back into view, if it isn't already
+check_hilite('backward: hilite spans hyphen and whitespace on both lines', l,
+             '\x1b[7mdemonstra-\x1b[0m\n\x1b[7m    tion\x1b[0m')
 l.close()
 
 # --- word split by U+2010 HYPHEN across a line break ---
@@ -102,12 +123,17 @@ open(unicodef, 'w', encoding='utf-8').write('\n'.join(ulines) + '\n')
 l = Less(unicodef, env='LESSCHARSET=utf-8')
 l.text('/hyphen'); l.key('Enter')
 check_found('forward: word split by U+2010 HYPHEN is found', l)
+check_hilite('forward: hilite spans U+2010 HYPHEN and whitespace', l,
+             '\x1b[7mhy‐\x1b[0m\n\x1b[7m    phen\x1b[0m')
 l.close()
 
 l = Less(unicodef, env='LESSCHARSET=utf-8')
 l.key('G')
 l.text('?hyphen'); l.key('Enter')
 check_found('backward: word split by U+2010 HYPHEN is found', l)
+l.key('k')
+check_hilite('backward: hilite spans U+2010 HYPHEN and whitespace', l,
+             '\x1b[7mhy‐\x1b[0m\n\x1b[7m    phen\x1b[0m')
 l.close()
 
 tmux('kill-session', '-t', KEEPALIVE)
