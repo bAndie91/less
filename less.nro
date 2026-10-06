@@ -1436,7 +1436,61 @@ For example, in a shell script, with \-\-sticky\-close='^[[:space:]]*(fi|done|es
 a line after an if / elif / fi is not shown under the elif.
 Without this option, only headers end each other's scopes.
 Lines which do not match, such as the lines of a here document, never close a scope.
+For \-\-sticky\-open: each match of \fIPATTERN\fP closes one scope.
 The special form \-\-sticky\-close=\- removes the pattern.
+.RE
+.IP "\-\-sticky\-open=\fIPATTERN\fP"
+.RS
+Find the enclosing headers by counting delimiters, for code which is not
+indented consistently, or whose scopes are keywords rather than indentation.
+Each match of \fIPATTERN\fP opens a scope and the line of the match is its header;
+each match of the \-\-sticky\-close pattern closes one.
+The headers pinned for the first line on the screen are the lines of the
+scopes which are open at that line.
+Delimiters which open and close on the same line cancel out.
+For example, for C style braces:
+.sp
+.nf
+less \-\-sticky\-open='\\{' \-\-sticky\-close='\\}' file.c
+.fi
+.PP
+\-\-sticky\-indent takes precedence over this option, which takes precedence over
+\-\-sticky\-header.
+The special form \-\-sticky\-open=\- turns it off.
+Block comments and here documents spanning lines are not understood, because
+the search backward cannot know where it is in the file.
+Without \-\-sticky\-root a search may have to go back to the start of the file
+(at most 16 MB); the lines it classifies are remembered.
+The following options refine this engine.
+.RE
+.IP "\-\-sticky\-ignore=\fIPATTERN\fP"
+.RS
+Text which matches \fIPATTERN\fP is not searched for delimiters:
+strings, character constants, comments.
+For example '"([^"\\\\]|\\\\.)*"|//.*$|/\\*.*\\*/'.
+.RE
+.IP "\-\-sticky\-match=\fIPATTERN\fP"
+.RS
+Only scopes whose opening line matches \fIPATTERN\fP are pinned.
+The other scopes are still counted.
+For example, to show only control structures and not bare blocks.
+.RE
+.IP "\-\-sticky\-root=\fIPATTERN\fP"
+.RS
+A line which matches \fIPATTERN\fP has no scope open before its own opening
+delimiters, so the search backward stops there.
+For example '^\\}' for code in which a closing brace in the first column
+always ends a top level definition.
+.RE
+.IP "\-\-sticky\-lead=\fIPATTERN\fP"
+.RS
+When the header line matches \fIPATTERN\fP, the closest non\-blank line before it is
+pinned instead.
+For example '^[[:space:]]*\\{[[:space:]]*$' for braces on their own line,
+so that the function signature is shown rather than a lone brace.
+.PP
+The options \-\-sticky\-open, \-\-sticky\-close, \-\-sticky\-ignore, \-\-sticky\-match,
+\-\-sticky\-root and \-\-sticky\-lead take the whole rest of the argument as their value.
 .RE
 .IP "\-\-sticky\-presets"
 .RS
@@ -1447,8 +1501,8 @@ With it, when a file is opened less looks it up in the presets files
 and applies the \-\-sticky\-* options of the first block which matches it.
 Options given on the command line, in the LESS variable or while less is running
 take precedence:
-if \-\-sticky\-header or \-\-sticky\-indent is given, the structure of the preset
-(its levels or its indent pattern) is not used at all;
+if \-\-sticky\-header, \-\-sticky\-indent or \-\-sticky\-open is given, the structure of the preset
+(its levels, its indent pattern or its delimiters) is not used at all;
 \-\-sticky\-skip is taken from the preset unless it is given.
 A "\-" value, as in \-\-sticky\-indent=\-, also overrides the preset.
 .PP

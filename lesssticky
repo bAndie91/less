@@ -85,9 +85,13 @@ Makefile makefile GNUmakefile *.mk *.make
     --sticky-close=^[[:space:]]*\}
     --sticky-skip=^[[:space:]]*(//|/\*|\*|$)
 
-# CSS (*.css *.scss *.less) is deliberately not here: it needs the brace
-# counting engine (--sticky-open/--sticky-close pairs), which is not built yet;
-# a preset for it will be added then.
+# CSS, SCSS, Less: counted braces (rules and at-rules nest, indentation is
+# not reliable).  A "}" in the first column ends a top level rule.
+*.css *.scss *.less
+    --sticky-open=\{
+    --sticky-close=\}
+    --sticky-ignore="([^"\\]|\\.)*"|'([^'\\]|\\.)*'|/\*.*\*/|//.*$
+    --sticky-root=^\}
 
 # ---- fixed levels --------------------------------------------------------
 

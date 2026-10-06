@@ -166,6 +166,11 @@ static struct optname sticky_header_optname = { "sticky-header", NULL };
 static struct optname sticky_indent_optname = { "sticky-indent", NULL };
 static struct optname sticky_skip_optname = { "sticky-skip", NULL };
 static struct optname sticky_close_optname = { "sticky-close", NULL };
+static struct optname sticky_open_optname = { "sticky-open", NULL };
+static struct optname sticky_match_optname = { "sticky-match", NULL };
+static struct optname sticky_ignore_optname = { "sticky-ignore", NULL };
+static struct optname sticky_root_optname = { "sticky-root", NULL };
+static struct optname sticky_lead_optname = { "sticky-lead", NULL };
 static struct optname sticky_presets_optname = { "sticky-presets", NULL };
 static struct optname nonum_headers_optname = { "no-number-headers", NULL };
 static struct optname nosearch_headers_optname = { "no-search-headers", NULL };
@@ -632,6 +637,26 @@ static struct loption option[] =
 	{ OLETTER_NONE, &sticky_close_optname,
 		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_close,
 		{ "Sticky: lines which end a scope (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_open_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_open,
+		{ "Sticky: delimiters which open a scope, by counting (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_match_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_match,
+		{ "Sticky: show only scopes opened on lines matching (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_ignore_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_ignore,
+		{ "Sticky: text to ignore when counting delimiters (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_root_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_root,
+		{ "Sticky: lines with no scope open before them (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_lead_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_lead,
+		{ "Sticky: header lines to replace by the line before (- to clear): ", NULL, NULL }
 	},
 	{ OLETTER_NONE, &sticky_presets_optname,
 		BOOL|REPAINT, OPT_OFF, &sticky_presets, opt_sticky_presets,

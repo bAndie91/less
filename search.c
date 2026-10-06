@@ -2487,6 +2487,53 @@ public lbool sticky_pattern_match(void *vinfo, constant char *line, size_t line_
 #endif
 }
 
+/*
+ * Convert a raw input line to the text patterns are matched against
+ * (as for sticky_pattern_match).  The result is allocated; the caller
+ * frees it.  *out_len is the converted length.
+ */
+public char * sticky_line_convert(constant char *line, size_t line_len, size_t *out_len)
+{
+	int cvt_ops = get_cvt_ops(0);
+	size_t cvt_len = cvt_length(line_len, cvt_ops);
+	char *cline = (char *) ecalloc(1, cvt_len);
+	int *chpos = cvt_alloc_chpos(cvt_len);
+	cvt_text(cline, line, chpos, &line_len, cvt_ops);
+	free(chpos);
+	*out_len = line_len;
+	return (cline);
+}
+
+/*
+ * Find the first match of a sticky pattern in a converted line, starting
+ * at offset "from" (so ^ does not match there unless from is 0).
+ * Sets *so and *eo to the offsets of the match.
+ */
+public lbool sticky_pattern_find(void *vinfo, constant char *cline, size_t cline_len, size_t from, size_t *so, size_t *eo)
+{
+#if NO_REGEX
+	return (FALSE);
+#else
+	struct pattern_info *info = (struct pattern_info *) vinfo;
+	int save_caseless = is_caseless;
+	constant char *sp[STICKY_NSP];
+	constant char *ep[STICKY_NSP];
+	int matched;
+
+	if (info == NULL || from > cline_len)
+		return (FALSE);
+	is_caseless = info->icase;
+	matched = match_pattern(info_compiled(info), info->text,
+		cline + from, cline_len - from, sp, ep, STICKY_NSP, (from > 0), info->search_type);
+	is_caseless = save_caseless;
+	if (!matched)
+		return (FALSE);
+	*so = (size_t) (sp[0] - cline);
+	*eo = (size_t) (ep[0] - cline);
+	return (TRUE);
+#endif
+}
+
 #if HAVE_V8_REGCOMP
 /*
  * This function is called by the V8 regcomp to report 

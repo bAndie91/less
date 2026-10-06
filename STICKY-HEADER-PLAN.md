@@ -91,7 +91,7 @@ Formatted brace languages also work, without counting braces: candidates
 a lone `{` is never a candidate).  Weak spots: minified or badly indented
 code; the `}` line shows its function but not its own `if`.
 
-## 5. Engine C: balanced delimiters (stage 3)
+## 5. Engine C: balanced delimiters (stage 3, done)
 
 For unformatted code and keyword-delimited syntax (shell `if`/`fi`, Ruby
 `def`/`end`, Lua, SQL `BEGIN`/`END`).
@@ -113,6 +113,30 @@ Algorithm: per line, collect OPEN and CLOSE matches in order of offset
 `need > 0`, else it is an unmatched opener, i.e. an enclosing scope whose
 header is that line.  Per-line (opens, closes) deltas are cached in the index
 so forward scrolling is incremental.
+
+Implemented as follows.  A line is reduced when it is indexed: matched pairs
+inside the line cancel, leaving `closes` unmatched closing delimiters followed
+by `opens` unmatched opening ones; only those two counts, and the flags
+(shown / root / lead), are stored.  The backward walk processes a line's
+opens first, then its closes.  Details settled while implementing:
+
+- Precedence of engines: `--sticky-indent`, then `--sticky-open`, then
+  `--sticky-header`.  A command-line `--sticky-open` replaces the preset's
+  structure as a whole, and then `close/ignore/match/root/lead` come from the
+  command line only (a preset's close pattern belongs to the preset's open
+  pattern).  With the structure from a preset, each of them can still be
+  overridden separately on the command line.
+- `--sticky-root`: a root line has no scope open before its own opening
+  delimiters (its closing delimiters are applied first), so the walk processes
+  that line's unmatched opens and stops.  `^\}` and `^function` both fit.
+- `--sticky-match` and `--sticky-lead` are tested against the whole header
+  line; `--sticky-ignore` text is blanked before counting.  A line with several
+  unmatched openers is pinned once.
+- `--sticky-lead` shows the closest non-blank line before the header (at most
+  16 lines back); a result equal to the outer header is not repeated.
+- Limits: 4096 delimiters per line, 60000 unmatched ones per line.
+- Primitives in `search.c`: `sticky_line_convert`, `sticky_pattern_find`.
+- Shipped: CSS/SCSS/Less preset (`--sticky-root=^\}`).
 
 Known limits, to be documented: block comments and heredocs spanning lines
 are not understood (backward scans cannot know the lexer state); without
@@ -166,7 +190,7 @@ For Markdown, org-mode and similar: `--sticky-level=EXPR` with
 - [x] A. explicit levels, overlay, paging/jump adjustments, docs, test
 - [x] B. indentation engine (`--sticky-indent`, `--sticky-skip`), docs, tests
 - [x] C. preset file (`LESSSTICKYPRESETS`), `--sticky-presets`, shebang patterns, CLI-over-preset slots, shipped `lesssticky`, `make install`
-- [ ] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`); then add the CSS/SCSS/Less preset (hidden from `lesssticky` until then: CSS must use brace counting, not indentation)
+- [x] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`), CSS/SCSS/Less preset, tests
 - [ ] E. capture-group levels
 - [ ] F. other makefiles, regenerate `less.man`/`less.hlp`, mouse wheel check
 

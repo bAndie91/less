@@ -259,6 +259,150 @@ find(l, 'arg3')
 check('close: --sticky-close ends the scope of the elif', l, ['f() {', 'arg3'])
 l.close()
 
+# --- balanced delimiters (--sticky-open and friends)
+BALSRC = """int f(int a)
+{
+    if (a) { g("}"); }   // } in a comment
+    /* { comment */
+    for (;;) {
+        if (a) {
+            x1
+            x2
+            x3
+            x4
+            x5
+            x6
+            x7
+        }
+        y1
+        y2
+        y3
+        y4
+        y5
+        y6
+        y7
+    }
+    z1
+    z2
+    z3
+    z4
+    z5
+}
+int h(void)
+{
+    w1
+    w2
+    w3
+    w4
+}
+tail1
+tail2
+""" + 'pad\n' * 20
+balfile = os.path.join(TMP, 'bal.c')
+open(balfile, 'w').write(BALSRC)
+balpre = os.path.join(TMP, 'bal-presets')
+open(balpre, 'w').write(r"""*.c
+    --sticky-open=\{
+    --sticky-close=\}
+    --sticky-ignore="([^"\\]|\\.)*"|//.*$|/\*.*\*/
+    --sticky-root=^\}
+    --sticky-lead=^[[:space:]]*\{[[:space:]]*$
+""")
+BENV = 'LESSSTICKYPRESETS=' + balpre
+l = Less('--sticky-presets ' + balfile, h=10, w=50, env=BENV)
+find(l, 'x4')
+check('balanced: nested scopes, lone { shows the line before', l, ['int f(int a)', 'for (;;) {', 'if (a) {', 'x4'])
+find(l, 'y4')
+check('balanced: closed scope is dropped; braces in strings and comments ignored', l, ['int f(int a)', 'for (;;) {', 'y4'])
+find(l, 'z3')
+check('balanced: only the function remains', l, ['int f(int a)', 'z3'])
+find(l, 'w3')
+check('balanced: next function, after the root line', l, ['int h(void)', 'w3'])
+find(l, 'tail2')
+check('balanced: nothing enclosing at top level', l, ['tail2'])
+l.close()
+
+# the same without --sticky-ignore: the "{" in the comment is counted
+l = Less(r"--sticky-open='\{' --sticky-close='\}' " + balfile, h=10, w=50)
+find(l, 'x4')
+check('balanced: without ignore, a brace in a comment opens a bogus scope', l, ['/* { comment */', 'for (;;) {', 'if (a) {'])
+l.close()
+
+l = Less(r"--sticky-open='\{' --sticky-close='\}' --sticky-match='^[[:space:]]*(for|if)' " + balfile, h=10, w=50)
+find(l, 'x4')
+check('balanced: --sticky-match shows only matching scopes', l, ['for (;;) {', 'if (a) {', 'x4'])
+l.close()
+
+SHBAL = """f() {
+if a; then
+for x in 1 2; do
+echo 1
+echo 2
+echo 3
+echo 4
+done
+echo 5
+echo 6
+fi
+echo 7
+echo 8
+}
+""" + 'pad\n' * 20
+shbal = os.path.join(TMP, 'bal.txt')
+open(shbal, 'w').write(SHBAL)
+SHB = (r"--sticky-open='(^|[[:space:]])(if|for|while|case)[[:space:]]|\{[[:space:]]*$' "
+       r"--sticky-close='(^|[[:space:];])(fi|done|esac)([[:space:];]|$)|^[[:space:]]*\}' ")
+l = Less(SHB + shbal, h=10, w=50)
+find(l, 'echo 3')
+check('balanced: keyword delimiters, no indentation', l, ['f() {', 'if a; then', 'for x in 1 2; do', 'echo 3'])
+find(l, 'echo 6')
+check('balanced: done closes the for', l, ['f() {', 'if a; then', 'echo 6'])
+find(l, 'echo 8')
+check('balanced: fi closes the if', l, ['f() {', 'echo 8'])
+l.close()
+
+# shipped CSS preset
+CSS = """/* } not a brace */
+@media (min-width: 600px) {
+  .a, .b {
+    color: red;
+    content: "}";
+    margin: 0;
+    padding: 0;
+    border: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+  .c { color: blue; }
+  .d {
+    color: green;
+    x1: 1;
+    x2: 2;
+    x3: 3;
+    x4: 4;
+    x5: 5;
+  }
+}
+.e {
+  color: black;
+  y1: 1;
+  y2: 2;
+  y3: 3;
+  y4: 4;
+}
+""" + 'pad: 0;\n' * 20
+cssf = os.path.join(TMP, 'style.css')
+open(cssf, 'w').write(CSS)
+l = Less('--sticky-presets ' + cssf, h=10, w=50, env=ENV)
+find(l, 'margin')
+check('css preset: nested rule inside @media', l, ['@media (min-width: 600px) {', '.a, .b {', 'margin: 0;'])
+find(l, 'x3')
+check('css preset: sibling rule after a one-line rule', l, ['@media (min-width: 600px) {', '.d {', 'x3: 3;'])
+find(l, 'y3')
+check('css preset: top level rule after the @media block', l, ['.e {', 'y3: 3;'])
+l.close()
+
 # --- levels without an enclosing header take no row
 l = Less(OPTS + ' ' + outline)
 l.text('/Section2'); l.key('Enter'); l.key('j', 'j', 'j', 'j', 'j', 'j')
@@ -279,6 +423,14 @@ t0 = time.time(); l.key('G'); l.key('b')
 dt = time.time() - t0
 print(('ok   ' if dt < 5 else 'FAIL ') + 'worst-case jump took %.2fs' % dt)
 fails += dt >= 5
+l.close()
+
+# balanced engine on the same file, no root: the search goes back to the start
+l = Less(r"--sticky-open='\{' --sticky-close='\}' " + big)
+t0 = time.time(); l.key('G'); l.key('b')
+dt = time.time() - t0
+print(('ok   ' if dt < 8 else 'FAIL ') + 'balanced worst-case jump took %.2fs' % dt)
+fails += dt >= 8
 l.close()
 
 tmux('kill-session', '-t', KEEPALIVE)
