@@ -422,6 +422,18 @@ find(l, 'text')
 check('level: len(\\1)-1 shifts the levels (level 0 is not a header)', l, ['== B', '=== C', 'text'])
 l.close()
 
+# --- mouse wheel (SGR mouse reports sent as typed bytes)
+whl = os.path.join(TMP, 'wheel.txt')
+open(whl, 'w').write(''.join('Section%d\n' % a + ''.join('\tline %d.%d\n' % (a, i) for i in range(30)) for a in (1, 2, 3)))
+l = Less(r"--mouse --sticky-header='^[^[:space:]]' " + whl, h=10, w=40)
+for _ in range(4):
+    tmux('send-keys', '-t', SESSION, '-l', '\x1b[<65;10;5M'); l.settle()
+check('mouse: wheel down keeps the header pinned', l, ['Section1', 'line 1.4'])
+for _ in range(2):
+    tmux('send-keys', '-t', SESSION, '-l', '\x1b[<64;10;5M'); l.settle()
+check('mouse: wheel up keeps the header pinned', l, ['Section1', 'line 1.2'])
+l.close()
+
 # --- levels without an enclosing header take no row
 l = Less(OPTS + ' ' + outline)
 l.text('/Section2'); l.key('Enter'); l.key('j', 'j', 'j', 'j', 'j', 'j')
