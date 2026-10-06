@@ -72,6 +72,7 @@ public int header_cols;         /* Freeze header columns at left of screen */
 public int nonum_headers;       /* Don't give headers line numbers */
 public int nosearch_header_lines = 0; /* Don't search in header lines */
 public int nosearch_header_cols = 0; /* Don't search in header columns */
+public int search_hyphenated;       /* Search across hyphenated line breaks */
 public int redraw_on_quit;      /* Redraw last screen after term deinit */
 public int def_search_type;     /* */
 public int exit_F_on_close;     /* Exit F command when input closes */
@@ -106,6 +107,7 @@ static struct optname g_optname      = { "hilite-search",        NULL };
 #endif
 static struct optname h_optname      = { "max-back-scroll",      NULL };
 static struct optname i_optname      = { "ignore-case",          NULL };
+static struct optname search_hyphenated_optname = { "search-hyphenated", NULL };
 static struct optname j_optname      = { "jump-target",          NULL };
 static struct optname J__optname     = { "status-column",        NULL };
 #if USERFILE
@@ -695,6 +697,14 @@ static struct loption option[] =
 		BOOL|HL_REPAINT, 0, NULL, opt_nosearch_header_cols,
 		{
 			NULL, NULL, NULL
+		}
+	},
+	{ OLETTER_NONE, &search_hyphenated_optname,
+		BOOL|HL_REPAINT, OPT_OFF, &search_hyphenated, NULL,
+		{
+			"Search only within physical lines",
+			"Search across hyphenated line breaks",
+			NULL
 		}
 	},
 	{ OLETTER_NONE, &redraw_on_quit_optname,
