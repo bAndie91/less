@@ -179,11 +179,18 @@ options.  Code: `stickypre.c`.
   languages (by indentation), Markdown, Org, diffs, INI, LaTeX, roff and
   Dockerfile.  POSIX regular expression syntax only.
 
-## 7. Stage 4: levels from capture groups
+## 7. Stage 4: levels from capture groups (done)
 
 For Markdown, org-mode and similar: `--sticky-level=EXPR` with
 `len(\N)` / `len(\N)+K`, so one `--sticky-header` pattern gives many levels
 (`^(#+)\s` with `len(\1)`).
+
+Implemented: `len(\N)`, `len(\N)+K`, `len(\N)-K`, N from 1 to 5 (the
+groups the regex libraries report); a level below 1 is not a header, above 64
+is clamped.  The first `--sticky-header` pattern which matches decides.  The
+expression comes from the command line if `--sticky-header` or `--sticky-level`
+was given there, else from the preset.  `lesssticky`: Markdown and Org use it
+(no longer limited to 6 and 4 levels).  Primitive: `sticky_pattern_group_len`.
 
 ## 8. Stages and status
 
@@ -191,7 +198,7 @@ For Markdown, org-mode and similar: `--sticky-level=EXPR` with
 - [x] B. indentation engine (`--sticky-indent`, `--sticky-skip`), docs, tests
 - [x] C. preset file (`LESSSTICKYPRESETS`), `--sticky-presets`, shebang patterns, CLI-over-preset slots, shipped `lesssticky`, `make install`
 - [x] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`), CSS/SCSS/Less preset, tests
-- [ ] E. capture-group levels
+- [x] E. capture-group levels (`--sticky-level`), Markdown/Org presets
 - [ ] F. other makefiles, regenerate `less.man`/`less.hlp`, mouse wheel check
 
 ## 9. Testing

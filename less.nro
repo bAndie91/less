@@ -1391,6 +1391,24 @@ is running.
 Sticky headers are not used while \-\-header lines are set.
 See also \-\-sticky\-indent.
 .RE
+.IP "\-\-sticky\-level=\fIEXPR\fP"
+.RS
+Use with \-\-sticky\-header.
+Instead of one pattern per level, the level of a line which matches
+a \-\-sticky\-header pattern is computed from the pattern:
+\fIEXPR\fP is len(\\\fIN\fP), len(\\\fIN\fP)+\fIK\fP or len(\\\fIN\fP)\-\fIK\fP,
+the length of the \fIN\fPth parenthesized group of the pattern
+(\fIN\fP is from 1 to 5) plus or minus a constant.
+A line whose level would be less than 1 is not a header.
+For example, Markdown headings:
+.sp
+.nf
+less \-\-sticky\-header='^(#{1,6})[[:space:]]' \-\-sticky\-level='len(\\1)' README.md
+.fi
+.PP
+If there are several \-\-sticky\-header patterns, the first which matches the line is used.
+The special form \-\-sticky\-level=\- removes it.
+.RE
 .IP "\-\-sticky\-indent=\fIPATTERN\fP"
 .RS
 Like \-\-sticky\-header, but the nesting is taken from indentation, so no

@@ -403,6 +403,25 @@ find(l, 'y3')
 check('css preset: top level rule after the @media block', l, ['.e {', 'y3: 3;'])
 l.close()
 
+# --- levels from a capture group (--sticky-level)
+MD = ("# One\n\n## Two\n\ntext\n\n### Three\n\n" + "body\n" * 3 + "\n## Four\n\n#### Five\n"
+      + "deep\n" * 12 + "\n# Six\n" + "last\n" * 20)
+mdf = os.path.join(TMP, 'doc.md')
+open(mdf, 'w').write(MD)
+l = Less('--sticky-presets ' + mdf, h=10, w=50, env=ENV)
+find(l, 'deep')
+check('level: markdown headings by number of #, a skipped level takes no row', l, ['# One', '## Four', '#### Five', 'deep'])
+find(l, 'last')
+check('level: new top level heading closes the previous ones', l, ['# Six', 'last'])
+l.close()
+
+eqf = os.path.join(TMP, 'eq.txt')
+open(eqf, 'w').write('= A\n== B\n=== C\n' + 'text\n' * 20 + '== D\n' + 'more\n' * 20)
+l = Less(r"--sticky-header='^(=+)[[:space:]]' --sticky-level='len(\1)-1' " + eqf, h=10, w=50)
+find(l, 'text')
+check('level: len(\\1)-1 shifts the levels (level 0 is not a header)', l, ['== B', '=== C', 'text'])
+l.close()
+
 # --- levels without an enclosing header take no row
 l = Less(OPTS + ' ' + outline)
 l.text('/Section2'); l.key('Enter'); l.key('j', 'j', 'j', 'j', 'j', 'j')

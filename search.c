@@ -2534,6 +2534,48 @@ public lbool sticky_pattern_find(void *vinfo, constant char *cline, size_t cline
 #endif
 }
 
+/*
+ * Match a raw input line against a sticky pattern and return the length of
+ * one of its parenthesized groups (group 0 is the whole match).
+ * Returns FALSE if the line does not match.  *glen is 0 if the group did not
+ * take part in the match or is not supported by the regular expression library.
+ */
+public lbool sticky_pattern_group_len(void *vinfo, constant char *line, size_t line_len, int group, size_t *glen)
+{
+#if NO_REGEX
+	return (FALSE);
+#else
+	struct pattern_info *info = (struct pattern_info *) vinfo;
+	int save_caseless = is_caseless;
+	size_t cvt_len;
+	char *cline;
+	int *chpos;
+	constant char *sp[STICKY_NSP];
+	constant char *ep[STICKY_NSP];
+	int matched;
+	int i;
+
+	*glen = 0;
+	if (info == NULL || group < 0 || group >= STICKY_NSP-1)
+		return (FALSE);
+	for (i = 0;  i < STICKY_NSP;  i++)
+		sp[i] = ep[i] = NULL;
+	is_caseless = info->icase;
+	cvt_len = cvt_length(line_len, get_cvt_ops(info->search_type));
+	cline = (char *) ecalloc(1, cvt_len);
+	chpos = cvt_alloc_chpos(cvt_len);
+	cvt_text(cline, line, chpos, &line_len, get_cvt_ops(info->search_type));
+	matched = match_pattern(info_compiled(info), info->text,
+		cline, line_len, sp, ep, STICKY_NSP, 0, info->search_type);
+	if (matched && sp[group] != NULL && ep[group] != NULL && ep[group] >= sp[group])
+		*glen = (size_t) (ep[group] - sp[group]);
+	free(cline);
+	free(chpos);
+	is_caseless = save_caseless;
+	return (matched ? TRUE : FALSE);
+#endif
+}
+
 #if HAVE_V8_REGCOMP
 /*
  * This function is called by the V8 regcomp to report 
