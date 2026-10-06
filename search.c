@@ -1503,6 +1503,20 @@ static void osc8_shift_visible(void)
  * *pnextpos is the position of the first physical line in the logical
  * line (so the next search continues before this logical line).
  */
+static int hyphenated_tail(constant char *line, size_t line_len)
+{
+	if (line_len >= 2 &&
+	    line[line_len-2] == '-' && line[line_len-1] == ' ')
+		return 2;
+	if (line_len >= 4 &&
+	    (unsigned char) line[line_len-4] == 0xE2 &&
+	    (unsigned char) line[line_len-3] == 0x80 &&
+	    (unsigned char) line[line_len-2] == 0x90 &&
+	    line[line_len-1] == ' ')
+		return 4;
+	return 0;
+}
+
 static int build_hyphenated_line(
 	int search_type, POSITION linepos, constant char *line, size_t line_len,
 	POSITION nextpos, char **pbuf, size_t *plen, POSITION *pnextpos)
@@ -1629,19 +1643,6 @@ static int build_hyphenated_line(
  * Return the number of bytes occupied by a supported trailing hyphen+space.
  * U+002D HYPHEN-MINUS is two bytes here; U+2010 HYPHEN is four.
  */
-static int hyphenated_tail(constant char *line, size_t line_len)
-{
-	if (line_len >= 2 &&
-	    line[line_len-2] == '-' && line[line_len-1] == ' ')
-		return 2;
-	if (line_len >= 4 &&
-	    (unsigned char) line[line_len-4] == 0xE2 &&
-	    (unsigned char) line[line_len-3] == 0x80 &&
-	    (unsigned char) line[line_len-2] == 0x90 &&
-	    line[line_len-1] == ' ')
-		return 4;
-	return 0;
-}
 
 /*
  * Search a subset of the file, specified by start/end position.
@@ -1660,7 +1661,6 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 	size_t cvt_len;
 	int *chpos;
 	POSITION linepos, oldpos;
-	POSITION hyphen_linepos;
 	POSITION hyphen_nextpos;
 	char *hyphen_line = NULL;
 	size_t hyphen_line_len = 0;
@@ -1794,7 +1794,6 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 			if (build_hyphenated_line(search_type, linepos, line, line_len,
 				pos, &hyphen_line, &hyphen_line_len, &hyphen_nextpos))
 			{
-				hyphen_linepos = linepos;
 				line = hyphen_line;
 				line_len = hyphen_line_len;
 				linepos = (search_type & SRCH_BACK) ? hyphen_nextpos : linepos;
