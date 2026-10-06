@@ -67,7 +67,7 @@ for a in range(1, 4):
                 lines.append('\t\t\tbody %d.%d.%d.%d' % (a, b, c, d))
 outline = os.path.join(TMP, 'outline.txt')
 open(outline, 'w').write('\n'.join(lines) + '\n')
-OPTS = r"--sticky-header='^[^\t]' --sticky-header='^\t[^\t]' --sticky-header='^\t\t[^\t]'"
+OPTS = r"--sticky-header='^[^[:space:]]' --sticky-header='^[[:space:]][^[:space:]]' --sticky-header='^[[:space:]][[:space:]][^[:space:]]'"
 
 l = Less(OPTS + ' ' + outline)
 check('start: nothing pinned yet', l, ['Section1', 'Sub1.1', 'Item1.1.1', 'body 1.1.1.1'])
