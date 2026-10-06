@@ -22,6 +22,13 @@
  * if it is indented deeper (continuation lines, heredocs).  Without it only
  * headers close each other.
  *
+ * With --sticky-open (balanced delimiters), every match of the open pattern
+ * starts a scope and every match of the close pattern ends one; the headers
+ * of the line are the lines of the scopes which are open at that line.
+ * --sticky-ignore text is not counted, --sticky-match restricts which scopes
+ * are shown, --sticky-root lines have no scope open before them, and
+ * --sticky-lead replaces a header line by the line before it.
+ *
  * Classified header lines are kept in a sorted index covering one
  * contiguous region of the file, grown on demand in both directions,
  * so scrolling by a few lines costs only the lines scrolled over.
@@ -57,10 +64,31 @@ struct sticky_level
 	void *pat;
 };
 
+/* Balanced delimiters: which patterns there are. */
+#define BAL_OPEN   0
+#define BAL_MATCH  1
+#define BAL_IGNORE 2
+#define BAL_ROOT   3
+#define BAL_LEAD   4
+#define BAL_N      5
+
+/* sticky_hdr.flags */
+#define HF_SHOWN 1   /* scopes opened here may be shown */
+#define HF_ROOT  2   /* no scope is open before this line's opening delimiters */
+#define HF_LEAD  4   /* show the previous line instead */
+#define STICKY_COUNT_MAX 60000
+#define STICKY_TOKEN_MAX 4096
+#define STICKY_LEAD_LOOKBACK 16
+
 struct sticky_hdr
 {
 	POSITION pos;
 	int level;
+	/* Balanced delimiters: unmatched closing and opening delimiters of the
+	 * line (matched pairs inside the line cancel out). */
+	unsigned short opens;
+	unsigned short closes;
+	unsigned short flags;
 };
 
 static struct sticky_level levels[MAX_STICKY_LEVELS];
@@ -74,6 +102,9 @@ static char *skip_text = NULL;
 static void *skip_pat = NULL;
 static char *close_text = NULL;
 static void *close_pat = NULL;
+/* Balanced delimiter engine (--sticky-open and friends). */
+static char *bal_text[BAL_N];
+static void *bal_pat[BAL_N];
 
 /*
  * Index of header lines and, in indentation mode, closing lines (negative
@@ -107,7 +138,8 @@ public int sticky_jump_adjust = 1;
  */
 public lbool sticky_active(void)
 {
-	return ((n_levels > 0 || indent_text != NULL) && !compile_failed && header_lines == 0);
+	return ((n_levels > 0 || indent_text != NULL || bal_text[BAL_OPEN] != NULL) &&
+		!compile_failed && header_lines == 0);
 }
 
 /*
@@ -141,6 +173,8 @@ struct sticky_settings
 	lbool have_skip;
 	char *close_text;
 	lbool have_close;
+	char *bal_text[BAL_N];
+	lbool have_bal[BAL_N];
 };
 static struct sticky_settings cli_settings;
 static struct sticky_settings preset_settings;
@@ -161,12 +195,19 @@ static void clear_levels(struct sticky_settings *st)
 
 static void clear_settings(struct sticky_settings *st)
 {
+	int i;
 	clear_levels(st);
 	free(st->indent_text);
 	free(st->skip_text);
 	free(st->close_text);
 	st->indent_text = st->skip_text = st->close_text = NULL;
 	st->have_levels = st->have_indent = st->have_skip = st->have_close = FALSE;
+	for (i = 0;  i < BAL_N;  i++)
+	{
+		free(st->bal_text[i]);
+		st->bal_text[i] = NULL;
+		st->have_bal[i] = FALSE;
+	}
 }
 
 public void sticky_preset_clear(void)
@@ -196,6 +237,14 @@ static void free_effective(void)
 	if (close_pat != NULL)
 		sticky_pattern_free(close_pat);
 	indent_pat = skip_pat = close_pat = NULL;
+	for (i = 0;  i < BAL_N;  i++)
+	{
+		if (bal_pat[i] != NULL)
+			sticky_pattern_free(bal_pat[i]);
+		bal_pat[i] = NULL;
+		free(bal_text[i]);
+		bal_text[i] = NULL;
+	}
 	free(indent_text);
 	free(skip_text);
 	free(close_text);
@@ -213,9 +262,10 @@ public void sticky_settings_changed(void)
 	int i;
 
 	free_effective();
-	st = (cli_settings.have_levels || cli_settings.have_indent) ? &cli_settings : &preset_settings;
+	st = (cli_settings.have_levels || cli_settings.have_indent || cli_settings.have_bal[BAL_OPEN])
+		? &cli_settings : &preset_settings;
 	sk = cli_settings.have_skip ? &cli_settings : &preset_settings;
-	cl = cli_settings.have_close ? &cli_settings : &preset_settings;
+	cl = (cli_settings.have_close || cli_settings.have_bal[BAL_OPEN]) ? &cli_settings : &preset_settings;
 	for (i = 0;  i < st->n_levels;  i++)
 		levels[i].text = save(st->level_text[i]);
 	n_levels = st->n_levels;
@@ -225,6 +275,19 @@ public void sticky_settings_changed(void)
 		skip_text = save(sk->skip_text);
 	if (cl->close_text != NULL)
 		close_text = save(cl->close_text);
+	/*
+	 * The delimiters belong together: when --sticky-open comes from the
+	 * command line, the rest of the group comes from there too, or is unset.
+	 */
+	if (st->bal_text[BAL_OPEN] != NULL)
+		bal_text[BAL_OPEN] = save(st->bal_text[BAL_OPEN]);
+	for (i = BAL_OPEN+1;  i < BAL_N;  i++)
+	{
+		struct sticky_settings *b = (cli_settings.have_bal[BAL_OPEN] || cli_settings.have_bal[i])
+			? &cli_settings : &preset_settings;
+		if (b->bal_text[i] != NULL)
+			bal_text[i] = save(b->bal_text[i]);
+	}
 	compile_failed = FALSE;
 	sticky_reset();
 	last_rows = 0;
@@ -257,6 +320,36 @@ static void compile_levels(void)
 			close_pat = sticky_pattern_new(close_text);
 			if (close_pat == NULL)
 				compile_failed = TRUE;
+		}
+		return;
+	}
+	if (bal_text[BAL_OPEN] != NULL)
+	{
+		if (bal_pat[BAL_OPEN] == NULL)
+			bal_pat[BAL_OPEN] = sticky_pattern_new(bal_text[BAL_OPEN]);
+		if (bal_pat[BAL_OPEN] == NULL)
+		{
+			compile_failed = TRUE;
+			return;
+		}
+		if (close_text != NULL && close_pat == NULL)
+			close_pat = sticky_pattern_new(close_text);
+		if (close_text != NULL && close_pat == NULL)
+		{
+			compile_failed = TRUE;
+			return;
+		}
+		for (i = BAL_OPEN+1;  i < BAL_N;  i++)
+		{
+			if (bal_text[i] != NULL && bal_pat[i] == NULL)
+			{
+				bal_pat[i] = sticky_pattern_new(bal_text[i]);
+				if (bal_pat[i] == NULL)
+				{
+					compile_failed = TRUE;
+					return;
+				}
+			}
 		}
 		return;
 	}
@@ -295,22 +388,18 @@ static void hgrow(lbool at_front)
 	(void) at_front;
 }
 
-static void hpush_back(POSITION pos, int level)
+static void hpush_back(struct sticky_hdr h)
 {
 	if (hend >= hcap)
 		hgrow(FALSE);
-	hbuf[hend].pos = pos;
-	hbuf[hend].level = level;
-	hend++;
+	hbuf[hend++] = h;
 }
 
-static void hpush_front(POSITION pos, int level)
+static void hpush_front(struct sticky_hdr h)
 {
 	if (hstart == 0)
 		hgrow(TRUE);
-	hstart--;
-	hbuf[hstart].pos = pos;
-	hbuf[hstart].level = level;
+	hbuf[--hstart] = h;
 }
 
 /*
@@ -387,7 +476,7 @@ static lbool indent_of(constant char *line, size_t line_len, int *indent)
  * In indentation mode the level is the indentation plus one, and a line
  * which closes scopes (--sticky-close) gets minus that.
  */
-static int classify(constant char *line, size_t line_len)
+static int classify_levels(constant char *line, size_t line_len)
 {
 	int i;
 	if (indent_text != NULL)
@@ -410,6 +499,99 @@ static int classify(constant char *line, size_t line_len)
 }
 
 /*
+ * Is the balanced delimiter engine in use?  (--sticky-indent wins over it.)
+ */
+static lbool balanced_engine(void)
+{
+	return (indent_text == NULL && bal_text[BAL_OPEN] != NULL);
+}
+
+static lbool pat_found(void *pat, constant char *cline, size_t clen, size_t from, size_t *so, size_t *eo)
+{
+	return (pat != NULL && sticky_pattern_find(pat, cline, clen, from, so, eo));
+}
+
+/*
+ * Count the delimiters of a line.  Pairs which open and close inside the
+ * line cancel out, leaving some closing delimiters and then some opening
+ * ones.  Returns TRUE if the line is worth indexing.
+ */
+static lbool classify_balanced(constant char *line, size_t line_len, struct sticky_hdr *h)
+{
+	size_t clen;
+	char *cline = sticky_line_convert(line, line_len, &clen);
+	size_t so, eo;
+	size_t oso = 0, oeo = 0, cso = 0, ceo = 0;
+	size_t p;
+	lbool ho, hc;
+	unsigned long o = 0, c = 0;
+	int ntok = 0;
+
+	h->flags = 0;
+	if (bal_pat[BAL_MATCH] == NULL || pat_found(bal_pat[BAL_MATCH], cline, clen, 0, &so, &eo))
+		h->flags |= HF_SHOWN;
+	if (pat_found(bal_pat[BAL_ROOT], cline, clen, 0, &so, &eo))
+		h->flags |= HF_ROOT;
+	if ((h->flags & HF_SHOWN) && pat_found(bal_pat[BAL_LEAD], cline, clen, 0, &so, &eo))
+		h->flags |= HF_LEAD;
+	if (bal_pat[BAL_IGNORE] != NULL)
+	{
+		/* Blank out what is not to be counted. */
+		p = 0;
+		while (ntok++ < STICKY_TOKEN_MAX && pat_found(bal_pat[BAL_IGNORE], cline, clen, p, &so, &eo))
+		{
+			if (eo > so)
+				memset(cline + so, ' ', eo - so);
+			p = (eo > so) ? eo : so + 1;
+		}
+		ntok = 0;
+	}
+	ho = pat_found(bal_pat[BAL_OPEN], cline, clen, 0, &oso, &oeo);
+	hc = pat_found(close_pat, cline, clen, 0, &cso, &ceo);
+	while ((ho || hc) && ntok++ < STICKY_TOKEN_MAX)
+	{
+		size_t start, end;
+		if (ho && (!hc || oso <= cso))
+		{
+			o++;
+			start = oso;
+			end = oeo;
+		} else
+		{
+			if (o > 0)
+				o--;
+			else
+				c++;
+			start = cso;
+			end = ceo;
+		}
+		p = (end > start) ? end : start + 1;
+		if (ho && oso < p)
+			ho = pat_found(bal_pat[BAL_OPEN], cline, clen, p, &oso, &oeo);
+		if (hc && cso < p)
+			hc = pat_found(close_pat, cline, clen, p, &cso, &ceo);
+	}
+	free(cline);
+	h->opens = (unsigned short) (o > STICKY_COUNT_MAX ? STICKY_COUNT_MAX : o);
+	h->closes = (unsigned short) (c > STICKY_COUNT_MAX ? STICKY_COUNT_MAX : c);
+	h->level = 1;
+	return (h->opens > 0 || h->closes > 0 || (h->flags & HF_ROOT));
+}
+
+/*
+ * Classify an input line: fill in *h (except the position) and return TRUE
+ * if the line has to be indexed.
+ */
+static lbool classify(constant char *line, size_t line_len, struct sticky_hdr *h)
+{
+	memset(h, 0, sizeof(*h));
+	if (balanced_engine())
+		return (classify_balanced(line, line_len, h));
+	h->level = classify_levels(line, line_len);
+	return (h->level != 0);
+}
+
+/*
  * Classify the line at reg_hi and extend the region over it.
  */
 static lbool extend_fwd(void)
@@ -417,16 +599,18 @@ static lbool extend_fwd(void)
 	constant char *line;
 	size_t line_len;
 	POSITION npos;
-	int lvl;
+	struct sticky_hdr h;
 
 	if (ABORT_SIGS())
 		return (FALSE);
 	npos = forw_raw_line(reg_hi, &line, &line_len);
 	if (npos == NULL_POSITION)
 		return (FALSE);
-	lvl = classify(line, line_len);
-	if (lvl != 0)
-		hpush_back(reg_hi, lvl);
+	if (classify(line, line_len, &h))
+	{
+		h.pos = reg_hi;
+		hpush_back(h);
+	}
 	reg_hi = npos;
 	return (TRUE);
 }
@@ -439,7 +623,8 @@ static lbool extend_bwd(int *plevel)
 	constant char *line;
 	size_t line_len;
 	POSITION npos;
-	int lvl;
+	struct sticky_hdr h;
+	lbool indexed;
 
 	*plevel = 0;
 	if (reg_bof || reg_lo <= scan_floor)
@@ -452,13 +637,16 @@ static lbool extend_bwd(int *plevel)
 		reg_bof = TRUE;
 		return (FALSE);
 	}
-	lvl = classify(line, line_len);
-	if (lvl != 0)
-		hpush_front(npos, lvl);
+	indexed = classify(line, line_len, &h);
+	if (indexed)
+	{
+		h.pos = npos;
+		hpush_front(h);
+	}
 	reg_lo = npos;
 	if (npos <= ch_zero())
 		reg_bof = TRUE;
-	*plevel = lvl;
+	*plevel = indexed ? h.level : 0;
 	return (TRUE);
 }
 
@@ -566,6 +754,80 @@ static int reference_indent(POSITION pos)
 }
 
 /*
+ * The line to show for a header whose own line is a mere "{": the closest
+ * non-blank line before it.
+ */
+static POSITION lead_target(POSITION pos)
+{
+	POSITION cur = pos;
+	int n;
+
+	for (n = 0;  n < STICKY_LEAD_LOOKBACK;  n++)
+	{
+		constant char *line;
+		size_t line_len;
+		POSITION npos = back_raw_line(cur, &line, &line_len);
+		if (npos == NULL_POSITION)
+			break;
+		if (line_indent(line, line_len) >= 0)
+			return (npos);
+		cur = npos;
+	}
+	return (pos);
+}
+
+/*
+ * Balanced delimiters: walk the index backward from the first entry before
+ * the line, counting closing delimiters still to be matched; an opening
+ * delimiter which is not matched belongs to an enclosing scope.
+ * idx is the index of the first entry at or after the line.
+ */
+static int stack_balanced(size_t idx, struct sticky_hdr *out)
+{
+	struct sticky_hdr tmp[STICKY_STACK_MAX];
+	long i = (long) idx - 1;
+	unsigned long need = 0;
+	lbool stop = FALSE;
+	int nt = 0;
+	int n = 0;
+	int k;
+
+	while (!stop && nt < STICKY_STACK_MAX)
+	{
+		struct sticky_hdr h;
+		unsigned long use;
+		if (i < 0)
+		{
+			size_t added = extend_for(0x7fffffff);
+			if (added == 0)
+				break;
+			idx += added;
+			i += (long) added;
+			continue;
+		}
+		h = HDR(i);
+		i--;
+		use = (h.opens < need) ? h.opens : need;
+		need -= use;
+		if (h.opens > use && (h.flags & HF_SHOWN))
+			tmp[nt++] = h;
+		need += h.closes;
+		if (h.flags & HF_ROOT)
+			stop = TRUE;
+	}
+	for (k = 0;  k < nt;  k++)
+	{
+		struct sticky_hdr h = tmp[nt-1-k];
+		if (h.flags & HF_LEAD)
+			h.pos = lead_target(h.pos);
+		if (n > 0 && out[n-1].pos == h.pos)
+			continue;
+		out[n++] = h;
+	}
+	return (n);
+}
+
+/*
  * Find the headers enclosing the line starting at pos.
  * Fill out[] outermost first; return how many there are.
  */
@@ -600,6 +862,9 @@ static int stack_for(POSITION pos, struct sticky_hdr *out)
 			hi = mid;
 	}
 	idx = lo;
+
+	if (balanced_engine())
+		return (stack_balanced(idx, out));
 
 	if (indent_text != NULL)
 		cur_max = reference_indent(pos);
@@ -853,6 +1118,55 @@ public void opt_sticky_close(int type, constant char *s)
 		shown("Sticky closing lines pattern", close_text);
 		break;
 	}
+}
+
+/*
+ * Handlers of the balanced delimiter options.
+ */
+static void bal_option(int type, constant char *s, int which, constant char *what)
+{
+	struct sticky_settings *st = target_settings();
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		if (s == NULL)
+			break;
+		free(st->bal_text[which]);
+		st->bal_text[which] = (strcmp(s, "-") != 0) ? save(s) : NULL;
+		st->have_bal[which] = TRUE;
+		if (!sticky_loading_preset)
+			sticky_settings_changed();
+		break;
+	case QUERY:
+		shown(what, bal_text[which]);
+		break;
+	}
+}
+
+public void opt_sticky_open(int type, constant char *s)
+{
+	bal_option(type, s, BAL_OPEN, "Sticky opening delimiters pattern");
+}
+
+public void opt_sticky_match(int type, constant char *s)
+{
+	bal_option(type, s, BAL_MATCH, "Sticky shown scopes pattern");
+}
+
+public void opt_sticky_ignore(int type, constant char *s)
+{
+	bal_option(type, s, BAL_IGNORE, "Sticky ignored text pattern");
+}
+
+public void opt_sticky_root(int type, constant char *s)
+{
+	bal_option(type, s, BAL_ROOT, "Sticky root lines pattern");
+}
+
+public void opt_sticky_lead(int type, constant char *s)
+{
+	bal_option(type, s, BAL_LEAD, "Sticky lead replacement pattern");
 }
 
 /*
