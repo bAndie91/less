@@ -894,6 +894,14 @@ if a pattern contains uppercase letters, then that search does not ignore case.
 .IP "\-I or \-\-IGNORE-CASE"
 Like \-i, but searches ignore case even if
 the pattern contains uppercase letters.
+.IP "\-\-search-hyphenated"
+When this option is set, a search may match text across a hyphenated line break.
+A line ending with either U+002D HYPHEN-MINUS or U+2010 HYPHEN,
+followed by a space, is considered joined to the next line when that line
+begins with a space.  The hyphen, the following space, the line break,
+and the leading space of the next line are ignored for purposes of matching.
+The default is to search only within physical lines.
+.PP
 .IP "\-j\fIn\fP or \-\-jump-target=\fIn\fP"
 Specifies a line on the screen where the "target" line
 is to be positioned.
