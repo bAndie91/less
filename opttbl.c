@@ -72,7 +72,7 @@ public int header_cols;         /* Freeze header columns at left of screen */
 public int nonum_headers;       /* Don't give headers line numbers */
 public int nosearch_header_lines = 0; /* Don't search in header lines */
 public int nosearch_header_cols = 0; /* Don't search in header columns */
-public int hyphen_search;       /* Match search patterns across hyphenated line breaks */
+public int multiline_search;    /* Match search patterns across line breaks */
 public int redraw_on_quit;      /* Redraw last screen after term deinit */
 public int def_search_type;     /* */
 public int exit_F_on_close;     /* Exit F command when input closes */
@@ -178,7 +178,7 @@ static struct optname nonum_headers_optname = { "no-number-headers", NULL };
 static struct optname nosearch_headers_optname = { "no-search-headers", NULL };
 static struct optname nosearch_header_lines_optname = { "no-search-header-lines", NULL };
 static struct optname nosearch_header_cols_optname = { "no-search-header-columns", NULL };
-static struct optname no_hyphen_search_optname = { "no-hyphen-search", NULL };
+static struct optname no_multiline_search_optname = { "no-multiline-search", NULL };
 static struct optname redraw_on_quit_optname = { "redraw-on-quit", NULL };
 static struct optname search_type_optname = { "search-options", NULL };
 static struct optname exit_F_on_close_optname = { "exit-follow-on-close", NULL };
@@ -699,11 +699,11 @@ static struct loption option[] =
 			NULL, NULL, NULL
 		}
 	},
-	{ OLETTER_NONE, &no_hyphen_search_optname,
-		BOOL, OPT_ON, &hyphen_search, NULL,
+	{ OLETTER_NONE, &no_multiline_search_optname,
+		BOOL, OPT_ON, &multiline_search, NULL,
 		{
-			"Don't match search patterns across hyphenated line breaks",
-			"Match search patterns across hyphenated line breaks",
+			"Don't match search patterns across line breaks",
+			"Match search patterns across line breaks",
 			NULL
 		}
 	},

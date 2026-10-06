@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# Tests for hyphen-aware searching (opt out with --no-hyphen-search).
+# Tests for multiline searching (opt out with --no-multiline-search).
 # Drives ./less in a tmux session.
-# Usage: lesstest/search-hyphenation.py [path-to-less]     (needs tmux, python3)
+# Usage: lesstest/search-multiline.py [path-to-less]     (needs tmux, python3)
 import os, subprocess, sys, tempfile, time
 
 LESS = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', 'less'))
-TMP = tempfile.mkdtemp(prefix='hyphen-test-')
-SESSION = 'hyphen-test-%d' % os.getpid()
+TMP = tempfile.mkdtemp(prefix='multiline-test-')
+SESSION = 'multiline-test-%d' % os.getpid()
 fails = 0
 KEEPALIVE = SESSION + '-keep'
 
@@ -50,10 +50,10 @@ class Less:
     def close(self):
         tmux('kill-session', '-t', SESSION)
 
-# A hyphen-joined match only succeeds through the hyphenation fallback (no
-# single line contains the whole pattern), so "no 'Pattern not found'" is
-# itself proof the join fired; "'Pattern not found' did appear" is proof
-# the fallback was not used (e.g. because it's disabled).
+# A multiline match only succeeds through the join fallback (no single
+# line contains the whole pattern), so "no 'Pattern not found'" is itself
+# proof the join fired; "'Pattern not found' did appear" is proof the
+# fallback was not used (e.g. because it's disabled).
 def check_found(name, less):
     global fails
     rows = less.rows()
@@ -72,10 +72,6 @@ def check_not_found(name, less):
         fails += 1
         print('FAIL', name, '(expected "Pattern not found")'); print('  rows', rows)
 
-# The whole hit should be highlighted on both sides of the break, including
-# the hyphen and the whitespace around it: "demonstra-" fully reversed on
-# one line, "    tion" (leading whitespace included) fully reversed on the
-# next.
 def check_hilite(name, less, expected):
     global fails
     text = less.raw()
@@ -85,23 +81,77 @@ def check_hilite(name, less, expected):
         fails += 1
         print('FAIL', name); print('  expected', repr(expected)); print('  got', repr(text))
 
-# --- word split by HYPHEN-MINUS ('-') across a line break ---
-lines = (['intro line'] + ['filler %d' % i for i in range(3)] +
-         ['this is a demonstra-', '    tion of something'] +
-         ['tail %d' % i for i in range(20)])
+# --- plain word-wrap, no hyphen: the break and surrounding whitespace
+# stand for a single space, so a pattern with a space in it can match
+# across the break. ---
+wrapf = os.path.join(TMP, 'wrap.txt')
+open(wrapf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'the quick brown fox\n    jumps over the lazy dog\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(wrapf)
+l.text('/fox jumps'); l.key('Enter')
+check_found('forward: plain word-wrap joined by a space is found', l)
+check_hilite('forward: hilite covers both sides, no literal space shown', l,
+             '\x1b[7mfox\x1b[0m\n\x1b[7m    jumps\x1b[0m')
+l.close()
+
+l = Less('--no-multiline-search ' + wrapf)
+l.text('/fox jumps'); l.key('Enter')
+check_not_found('forward: --no-multiline-search disables the plain join', l)
+l.close()
+
+l = Less(wrapf)
+l.key('G')
+l.text('?fox jumps'); l.key('Enter')
+check_found('backward: plain word-wrap joined by a space is found', l)
+l.key('k')
+check_hilite('backward: hilite covers both sides, no literal space shown', l,
+             '\x1b[7mfox\x1b[0m\n\x1b[7m    jumps\x1b[0m')
+l.close()
+
+# --- a line ending in a hyphen is ambiguous: it could be a genuine
+# hyphenation (drop the hyphen) or two words joined with a literal
+# hyphen (keep it).  Both interpretations must be tried. ---
+dualf = os.path.join(TMP, 'dual.txt')
+open(dualf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'lorem-\nipsum dolor\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(dualf)
+l.text('/loremipsum'); l.key('Enter')
+check_found('hyphen is ambiguous: dehyphenated form is found', l)
+check_hilite('hyphen is ambiguous: dehyphenated hilite keeps the hyphen visible', l,
+             '\x1b[7mlorem-\x1b[0m\n\x1b[7mipsum\x1b[0m')
+l.close()
+
+l = Less(dualf)
+l.text('/lorem-ipsum'); l.key('Enter')
+check_found('hyphen is ambiguous: literal-hyphen form is also found', l)
+check_hilite('hyphen is ambiguous: literal-hyphen hilite spans both lines', l,
+             '\x1b[7mlorem-\x1b[0m\n\x1b[7mipsum\x1b[0m')
+l.close()
+
+l = Less('--no-multiline-search ' + dualf)
+l.text('/loremipsum'); l.key('Enter')
+check_not_found('--no-multiline-search disables the hyphen case too', l)
+l.close()
+
+# --- word split by HYPHEN-MINUS ('-'), as a special case of the above
+# where dropping the hyphen is the only interpretation that matches ---
 asciif = os.path.join(TMP, 'ascii.txt')
-open(asciif, 'w').write('\n'.join(lines) + '\n')
+open(asciif, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'this is a demonstra-\n    tion of something\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
 
 l = Less(asciif)
 l.text('/demonstration'); l.key('Enter')
 check_found('forward: word split by hyphen-minus is found', l)
 check_hilite('forward: hilite spans hyphen and whitespace on both lines', l,
              '\x1b[7mdemonstra-\x1b[0m\n\x1b[7m    tion\x1b[0m')
-l.close()
-
-l = Less('--no-hyphen-search ' + asciif)
-l.text('/demonstration'); l.key('Enter')
-check_not_found('forward: --no-hyphen-search disables the join', l)
 l.close()
 
 l = Less(asciif)
