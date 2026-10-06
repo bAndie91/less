@@ -102,6 +102,9 @@ static char *skip_text = NULL;
 static void *skip_pat = NULL;
 static char *close_text = NULL;
 static void *close_pat = NULL;
+/* Levels from a capture group (--sticky-level): level = len(group) + level_add. */
+static int level_group = 0;
+static int level_add = 0;
 /* Balanced delimiter engine (--sticky-open and friends). */
 static char *bal_text[BAL_N];
 static void *bal_pat[BAL_N];
@@ -175,6 +178,9 @@ struct sticky_settings
 	lbool have_close;
 	char *bal_text[BAL_N];
 	lbool have_bal[BAL_N];
+	int level_group;
+	int level_add;
+	lbool have_level;
 };
 static struct sticky_settings cli_settings;
 static struct sticky_settings preset_settings;
@@ -208,6 +214,8 @@ static void clear_settings(struct sticky_settings *st)
 		st->bal_text[i] = NULL;
 		st->have_bal[i] = FALSE;
 	}
+	st->level_group = st->level_add = 0;
+	st->have_level = FALSE;
 }
 
 public void sticky_preset_clear(void)
@@ -275,6 +283,12 @@ public void sticky_settings_changed(void)
 		skip_text = save(sk->skip_text);
 	if (cl->close_text != NULL)
 		close_text = save(cl->close_text);
+	{
+		struct sticky_settings *lv = (cli_settings.have_levels || cli_settings.have_level)
+			? &cli_settings : &preset_settings;
+		level_group = lv->level_group;
+		level_add = lv->level_add;
+	}
 	/*
 	 * The delimiters belong together: when --sticky-open comes from the
 	 * command line, the rest of the group comes from there too, or is unset.
@@ -479,6 +493,22 @@ static lbool indent_of(constant char *line, size_t line_len, int *indent)
 static int classify_levels(constant char *line, size_t line_len)
 {
 	int i;
+	if (indent_text == NULL && level_group > 0)
+	{
+		/* One pattern gives many levels: the length of a group. */
+		for (i = 0;  i < n_levels;  i++)
+		{
+			size_t glen;
+			long lvl;
+			if (!sticky_pattern_group_len(levels[i].pat, line, line_len, level_group, &glen))
+				continue;
+			lvl = (long) glen + level_add;
+			if (lvl < 1)
+				return (0);
+			return (lvl > STICKY_STACK_MAX ? STICKY_STACK_MAX : (int) lvl);
+		}
+		return (0);
+	}
 	if (indent_text != NULL)
 	{
 		int ind;
@@ -870,7 +900,7 @@ static int stack_for(POSITION pos, struct sticky_hdr *out)
 		cur_max = reference_indent(pos);
 	else
 	{
-		cur_max = n_levels;
+		cur_max = (level_group > 0) ? STICKY_STACK_MAX : n_levels;
 		if (idx < HCOUNT() && HDR(idx).pos == pos)
 			cur_max = HDR(idx).level - 1;
 	}
@@ -1167,6 +1197,72 @@ public void opt_sticky_root(int type, constant char *s)
 public void opt_sticky_lead(int type, constant char *s)
 {
 	bal_option(type, s, BAL_LEAD, "Sticky lead replacement pattern");
+}
+
+/*
+ * Parse len(\N), len(\N)+K or len(\N)-K.
+ */
+static lbool parse_level_expr(constant char *s, int *group, int *add)
+{
+	char *end;
+	long k = 0;
+
+	if (strncmp(s, "len(\\", 5) != 0 || s[5] < '1' || s[5] > '5' || s[6] != ')')
+		return (FALSE);
+	*group = s[5] - '0';
+	s += 7;
+	if (*s == '\0')
+	{
+		*add = 0;
+		return (TRUE);
+	}
+	if (*s != '+' && *s != '-')
+		return (FALSE);
+	k = strtol(s, &end, 10);
+	if (end == s || *end != '\0' || k < -STICKY_STACK_MAX || k > STICKY_STACK_MAX)
+		return (FALSE);
+	*add = (int) k;
+	return (TRUE);
+}
+
+/*
+ * Handler for the --sticky-level option: with it, the level of a line which
+ * matches a --sticky-header pattern is the length of one of the pattern's
+ * parenthesized groups (plus a constant), instead of the number of the pattern.
+ * "-" removes it.
+ */
+public void opt_sticky_level(int type, constant char *s)
+{
+	struct sticky_settings *st = target_settings();
+	int group = 0;
+	int add = 0;
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		if (s == NULL)
+			break;
+		if (strcmp(s, "-") != 0 && !parse_level_expr(s, &group, &add))
+		{
+			error("Sticky level: use len(\\N) or len(\\N)+K, N from 1 to 5", NULL_PARG);
+			break;
+		}
+		st->level_group = group;
+		st->level_add = add;
+		st->have_level = TRUE;
+		if (!sticky_loading_preset)
+			sticky_settings_changed();
+		break;
+	case QUERY:
+		{
+			char buf[64];
+			buf[0] = '\0';
+			if (level_group > 0)
+				snprintf(buf, sizeof(buf), "len(\\%d)%+d", level_group, level_add);
+			shown("Sticky level expression", (level_group > 0) ? buf : NULL);
+		}
+		break;
+	}
 }
 
 /*

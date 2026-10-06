@@ -166,6 +166,7 @@ static struct optname sticky_header_optname = { "sticky-header", NULL };
 static struct optname sticky_indent_optname = { "sticky-indent", NULL };
 static struct optname sticky_skip_optname = { "sticky-skip", NULL };
 static struct optname sticky_close_optname = { "sticky-close", NULL };
+static struct optname sticky_level_optname = { "sticky-level", NULL };
 static struct optname sticky_open_optname = { "sticky-open", NULL };
 static struct optname sticky_match_optname = { "sticky-match", NULL };
 static struct optname sticky_ignore_optname = { "sticky-ignore", NULL };
@@ -657,6 +658,10 @@ static struct loption option[] =
 	{ OLETTER_NONE, &sticky_lead_optname,
 		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_lead,
 		{ "Sticky: header lines to replace by the line before (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_level_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_level,
+		{ "Sticky: level from a group of the header pattern, len(\\N)+K (- to clear): ", NULL, NULL }
 	},
 	{ OLETTER_NONE, &sticky_presets_optname,
 		BOOL|REPAINT, OPT_OFF, &sticky_presets, opt_sticky_presets,

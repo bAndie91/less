@@ -95,21 +95,15 @@ Makefile makefile GNUmakefile *.mk *.make
 
 # ---- fixed levels --------------------------------------------------------
 
-# Markdown: heading levels
+# Markdown: the level is the number of "#"
 *.md *.markdown
-    --sticky-header=^#[[:space:]]
-    --sticky-header=^##[[:space:]]
-    --sticky-header=^###[[:space:]]
-    --sticky-header=^####[[:space:]]
-    --sticky-header=^#####[[:space:]]
-    --sticky-header=^######[[:space:]]
+    --sticky-header=^(#{1,6})[[:space:]]
+    --sticky-level=len(\1)
 
-# Org mode
+# Org mode: the level is the number of "*"
 *.org
-    --sticky-header=^\*[[:space:]]
-    --sticky-header=^\*\*[[:space:]]
-    --sticky-header=^\*\*\*[[:space:]]
-    --sticky-header=^\*\*\*\*[[:space:]]
+    --sticky-header=^(\*+)[[:space:]]
+    --sticky-level=len(\1)
 
 # Diffs and patches: file, then hunk
 *.diff *.patch

@@ -402,6 +402,8 @@ public int get_swindow_back(void);
 public void * sticky_pattern_new(constant char *text);
 public void sticky_pattern_free(void *vinfo);
 public lbool sticky_pattern_match(void *vinfo, constant char *line, size_t line_len);
+public lbool sticky_pattern_group_len(void *vinfo, constant char *line, size_t line_len, int group, size_t *glen);
+public void opt_sticky_level(int type, constant char *s);
 public char * sticky_line_convert(constant char *line, size_t line_len, size_t *out_len);
 public lbool sticky_pattern_find(void *vinfo, constant char *cline, size_t cline_len, size_t from, size_t *so, size_t *eo);
 public void opt_sticky_open(int type, constant char *s);
