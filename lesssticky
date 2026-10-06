@@ -89,6 +89,7 @@ Makefile makefile GNUmakefile *.mk *.make
 # not reliable).  A "}" in the first column ends a top level rule.
 *.css *.scss *.less
     --sticky-open=\{
+    --sticky-lead=\{
     --sticky-close=\}
     --sticky-ignore="([^"\\]|\\.)*"|'([^'\\]|\\.)*'|/\*.*\*/|//.*$
     --sticky-root=^\}
