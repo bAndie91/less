@@ -16,6 +16,12 @@
  * encloses a line if it is indented strictly less than that line, and
  * only lines matching the given pattern are header candidates.
  *
+ * With --sticky-close, lines which match its pattern end the scope of every
+ * header indented as much as they are or more (fi, done, esac, }, end ...):
+ * a line after such a closing line is not enclosed by those headers, even
+ * if it is indented deeper (continuation lines, heredocs).  Without it only
+ * headers close each other.
+ *
  * Classified header lines are kept in a sorted index covering one
  * contiguous region of the file, grown on demand in both directions,
  * so scrolling by a few lines costs only the lines scrolled over.
@@ -66,9 +72,12 @@ static char *indent_text = NULL;
 static void *indent_pat = NULL;
 static char *skip_text = NULL;
 static void *skip_pat = NULL;
+static char *close_text = NULL;
+static void *close_pat = NULL;
 
 /*
- * Index of header lines: a deque, sorted by position.
+ * Index of header lines and, in indentation mode, closing lines (negative
+ * level): a deque, sorted by position.
  * Valid entries are hbuf[hstart] ... hbuf[hend-1].
  */
 static struct sticky_hdr *hbuf = NULL;
@@ -130,6 +139,8 @@ struct sticky_settings
 	lbool have_indent;
 	char *skip_text;
 	lbool have_skip;
+	char *close_text;
+	lbool have_close;
 };
 static struct sticky_settings cli_settings;
 static struct sticky_settings preset_settings;
@@ -153,8 +164,9 @@ static void clear_settings(struct sticky_settings *st)
 	clear_levels(st);
 	free(st->indent_text);
 	free(st->skip_text);
-	st->indent_text = st->skip_text = NULL;
-	st->have_levels = st->have_indent = st->have_skip = FALSE;
+	free(st->close_text);
+	st->indent_text = st->skip_text = st->close_text = NULL;
+	st->have_levels = st->have_indent = st->have_skip = st->have_close = FALSE;
 }
 
 public void sticky_preset_clear(void)
@@ -181,10 +193,13 @@ static void free_effective(void)
 		sticky_pattern_free(indent_pat);
 	if (skip_pat != NULL)
 		sticky_pattern_free(skip_pat);
-	indent_pat = skip_pat = NULL;
+	if (close_pat != NULL)
+		sticky_pattern_free(close_pat);
+	indent_pat = skip_pat = close_pat = NULL;
 	free(indent_text);
 	free(skip_text);
-	indent_text = skip_text = NULL;
+	free(close_text);
+	indent_text = skip_text = close_text = NULL;
 }
 
 /*
@@ -194,11 +209,13 @@ public void sticky_settings_changed(void)
 {
 	struct sticky_settings *st;
 	struct sticky_settings *sk;
+	struct sticky_settings *cl;
 	int i;
 
 	free_effective();
 	st = (cli_settings.have_levels || cli_settings.have_indent) ? &cli_settings : &preset_settings;
 	sk = cli_settings.have_skip ? &cli_settings : &preset_settings;
+	cl = cli_settings.have_close ? &cli_settings : &preset_settings;
 	for (i = 0;  i < st->n_levels;  i++)
 		levels[i].text = save(st->level_text[i]);
 	n_levels = st->n_levels;
@@ -206,6 +223,8 @@ public void sticky_settings_changed(void)
 		indent_text = save(st->indent_text);
 	if (sk->skip_text != NULL)
 		skip_text = save(sk->skip_text);
+	if (cl->close_text != NULL)
+		close_text = save(cl->close_text);
 	compile_failed = FALSE;
 	sticky_reset();
 	last_rows = 0;
@@ -231,6 +250,12 @@ static void compile_levels(void)
 		{
 			skip_pat = sticky_pattern_new(skip_text);
 			if (skip_pat == NULL)
+				compile_failed = TRUE;
+		}
+		if (close_text != NULL && close_pat == NULL)
+		{
+			close_pat = sticky_pattern_new(close_text);
+			if (close_pat == NULL)
 				compile_failed = TRUE;
 		}
 		return;
@@ -359,7 +384,8 @@ static lbool indent_of(constant char *line, size_t line_len, int *indent)
 
 /*
  * Which level does an input line belong to?  0 = not a header.
- * In indentation mode the level is the indentation plus one.
+ * In indentation mode the level is the indentation plus one, and a line
+ * which closes scopes (--sticky-close) gets minus that.
  */
 static int classify(constant char *line, size_t line_len)
 {
@@ -369,9 +395,11 @@ static int classify(constant char *line, size_t line_len)
 		int ind;
 		if (!indent_of(line, line_len, &ind))
 			return (0);
-		if (!sticky_pattern_match(indent_pat, line, line_len))
-			return (0);
-		return (ind + 1);
+		if (sticky_pattern_match(indent_pat, line, line_len))
+			return (ind + 1);
+		if (close_pat != NULL && sticky_pattern_match(close_pat, line, line_len))
+			return (-(ind + 1));
+		return (0);
 	}
 	for (i = n_levels-1;  i >= 0;  i--)
 	{
@@ -397,7 +425,7 @@ static lbool extend_fwd(void)
 	if (npos == NULL_POSITION)
 		return (FALSE);
 	lvl = classify(line, line_len);
-	if (lvl > 0)
+	if (lvl != 0)
 		hpush_back(reg_hi, lvl);
 	reg_hi = npos;
 	return (TRUE);
@@ -425,7 +453,7 @@ static lbool extend_bwd(int *plevel)
 		return (FALSE);
 	}
 	lvl = classify(line, line_len);
-	if (lvl > 0)
+	if (lvl != 0)
 		hpush_front(npos, lvl);
 	reg_lo = npos;
 	if (npos <= ch_zero())
@@ -597,6 +625,14 @@ static int stack_for(POSITION pos, struct sticky_hdr *out)
 		}
 		h = HDR(i);
 		i--;
+		if (h.level < 0)
+		{
+			/* A closing line ends every scope indented as much as it is. */
+			int c = -h.level - 1;
+			if (c < cur_max)
+				cur_max = c;
+			continue;
+		}
 		if (h.level <= cur_max)
 		{
 			tmp[nt++] = h;
@@ -790,6 +826,31 @@ public void opt_sticky_skip(int type, constant char *s)
 		break;
 	case QUERY:
 		shown("Sticky skip pattern", skip_text);
+		break;
+	}
+}
+
+/*
+ * Handler for the --sticky-close option: lines which end the scope of the
+ * headers indented as much as they are or more (fi, done, }, end ...).
+ */
+public void opt_sticky_close(int type, constant char *s)
+{
+	struct sticky_settings *st = target_settings();
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		if (s == NULL)
+			break;
+		free(st->close_text);
+		st->close_text = (strcmp(s, "-") != 0) ? save(s) : NULL;
+		st->have_close = TRUE;
+		if (!sticky_loading_preset)
+			sticky_settings_changed();
+		break;
+	case QUERY:
+		shown("Sticky closing lines pattern", close_text);
 		break;
 	}
 }

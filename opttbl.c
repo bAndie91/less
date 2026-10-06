@@ -165,6 +165,7 @@ extern int sticky_presets;
 static struct optname sticky_header_optname = { "sticky-header", NULL };
 static struct optname sticky_indent_optname = { "sticky-indent", NULL };
 static struct optname sticky_skip_optname = { "sticky-skip", NULL };
+static struct optname sticky_close_optname = { "sticky-close", NULL };
 static struct optname sticky_presets_optname = { "sticky-presets", NULL };
 static struct optname nonum_headers_optname = { "no-number-headers", NULL };
 static struct optname nosearch_headers_optname = { "no-search-headers", NULL };
@@ -627,6 +628,10 @@ static struct loption option[] =
 	{ OLETTER_NONE, &sticky_skip_optname,
 		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_skip,
 		{ "Sticky: lines to ignore for indentation (- to clear): ", NULL, NULL }
+	},
+	{ OLETTER_NONE, &sticky_close_optname,
+		STRING|REPAINT|RAW_STRING, 0, NULL, opt_sticky_close,
+		{ "Sticky: lines which end a scope (- to clear): ", NULL, NULL }
 	},
 	{ OLETTER_NONE, &sticky_presets_optname,
 		BOOL|REPAINT, OPT_OFF, &sticky_presets, opt_sticky_presets,

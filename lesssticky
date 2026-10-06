@@ -10,6 +10,10 @@
 # of the file: the last component of its path, or if that is "env", of the
 # first argument of env which is not an option or a NAME=value.
 #
+# --sticky-close names the lines which end a scope (fi, done, }, end ...), so
+# that deeper lines after them (continuation lines, heredocs) are not shown
+# under a header which is already closed.
+#
 # The regular expressions use only POSIX syntax, so they work with every
 # regular expression library which less can be built with.
 #
@@ -27,21 +31,25 @@
 # Shell scripts
 *.sh *.bash *.zsh *.ksh .bashrc .bash_profile .zshrc .profile $*sh
     --sticky-indent=^[[:space:]]*(function[[:space:]]|[[:alnum:]_.:@-]+[[:space:]]*\(\)|(if|elif|else|for|while|until|case|select)([^[:alnum:]_]|$))
+    --sticky-close=^[[:space:]]*(fi|done|esac|\})([^[:alnum:]_]|$)
     --sticky-skip=^[[:space:]]*(#|$)
 
 # Ruby
 *.rb *.rake *.gemspec Rakefile Gemfile $ruby*
     --sticky-indent=^[[:space:]]*(def|class|module|if|elsif|else|unless|case|when|while|until|for|begin|rescue|ensure|do)([^[:alnum:]_?!]|$)|[[:space:]]do([[:space:]]*\|[^|]*\|)?[[:space:]]*$
+    --sticky-close=^[[:space:]]*end([^[:alnum:]_?!]|$)
     --sticky-skip=^[[:space:]]*(#|$)
 
 # Lua
 *.lua $lua*
     --sticky-indent=^[[:space:]]*(local[[:space:]]+)?function([^[:alnum:]_]|$)|^[[:space:]]*(if|elseif|else|for|while|repeat)([^[:alnum:]_]|$)|(function[[:space:]]*\([^)]*\)|[[:space:]]do)[[:space:]]*$
+    --sticky-close=^[[:space:]]*(end|until)([^[:alnum:]_]|$)
     --sticky-skip=^[[:space:]]*(--|$)
 
 # Makefiles: targets, and conditionals
 Makefile makefile GNUmakefile *.mk *.make
     --sticky-indent=^[^[:space:]#=:]+[[:space:]]*:([^=]|$)|^[[:space:]]*(ifeq|ifneq|ifdef|ifndef|else)([^[:alnum:]_]|$)
+    --sticky-close=^[[:space:]]*(endif|endef)([^[:alnum:]_]|$)
     --sticky-skip=^[[:space:]]*(#|$)
 
 # YAML: keys which have nested content, and list items
@@ -52,10 +60,12 @@ Makefile makefile GNUmakefile *.mk *.make
 # JSON: keys which open an object or array
 *.json *.jsonc *.geojson
     --sticky-indent=^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*[{[][[:space:]]*$
+    --sticky-close=^[[:space:]]*[]}]
 
 # HTML and XML: opening tags alone on their line
 *.html *.htm *.xhtml *.xml *.xsl *.xslt *.svg *.plist *.rss
     --sticky-indent=^[[:space:]]*<[[:alpha:]]([^<>]*[^/<>])?>[[:space:]]*$
+    --sticky-close=^[[:space:]]*</
     --sticky-skip=^[[:space:]]*<!--
 
 # ---- curly brackets (indentation based; no brackets are counted) --------
@@ -66,17 +76,18 @@ Makefile makefile GNUmakefile *.mk *.make
 # C family, C#, PHP, Perl, Terraform, nginx (# starts a comment or a directive)
 *.c *.h *.cc *.cpp *.cxx *.hh *.hpp *.hxx *.m *.mm *.cs *.php *.pl *.pm *.t *.tf *.hcl nginx.conf $perl* $php*
     --sticky-indent=^[[:space:]]*[^[:space:]{].*\{[[:space:]]*(//.*)?$|^[[:space:]]*(if|else|for|foreach|while|do|switch|try|catch|finally|elsif|unless|until)([^[:alnum:]_]|$)|^[[:space:]]*[A-Za-z_][^;=]*\)[[:space:]]*$
+    --sticky-close=^[[:space:]]*\}
     --sticky-skip=^[[:space:]]*(//|/\*|\*|#|$)
 
 # JavaScript, TypeScript, Java, Go, Rust, Swift, Kotlin, Scala, Dart, Zig, D, Groovy
 *.js *.mjs *.cjs *.jsx *.ts *.tsx *.java *.go *.rs *.swift *.kt *.kts *.scala *.dart *.zig *.d *.groovy *.gradle $node* $deno* $bun*
     --sticky-indent=^[[:space:]]*[^[:space:]{].*\{[[:space:]]*(//.*)?$|^[[:space:]]*(if|else|for|foreach|while|do|switch|try|catch|finally)([^[:alnum:]_]|$)|^[[:space:]]*[A-Za-z_][^;=]*\)[[:space:]]*$
+    --sticky-close=^[[:space:]]*\}
     --sticky-skip=^[[:space:]]*(//|/\*|\*|$)
 
-# CSS and friends: rules
-*.css *.scss *.less
-    --sticky-indent=^[[:space:]]*[^[:space:]{].*\{[[:space:]]*(/\*.*\*/)?$
-    --sticky-skip=^[[:space:]]*(/\*|\*|$)
+# CSS (*.css *.scss *.less) is deliberately not here: it needs the brace
+# counting engine (--sticky-open/--sticky-close pairs), which is not built yet;
+# a preset for it will be added then.
 
 # ---- fixed levels --------------------------------------------------------
 

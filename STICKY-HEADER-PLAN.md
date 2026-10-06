@@ -52,6 +52,7 @@ Options:
 |---|---|
 | `--sticky-indent=REGEX` | enable the engine; lines matching REGEX are header candidates (`.` = any line); `-` disables it |
 | `--sticky-skip=REGEX` | lines that are transparent: never headers, never define the reference indent (comments etc.); blank lines are always transparent |
+| `--sticky-close=REGEX` | lines which close scopes (`fi`, `done`, `}`, `end`, ...): see "Closing lines" |
 
 Rules:
 
@@ -63,6 +64,16 @@ Rules:
 - **Ancestors**: candidates before the line with `indent < d`, nearest first,
   each one lowering the bound to its own indent.  A candidate line that is
   itself on the first row is not its own ancestor.
+- **Closing lines** (`--sticky-close`): a header encloses a line only if no
+  closing line lies between them with indent `<=` the header's.  Indentation
+  alone cannot tell that a `fi` ended an `elif` scope: a later line indented
+  deeper (continuation line, heredoc body) would still find the `elif` as its
+  nearest shallower header.  Closing lines are indexed next to the headers
+  (negative level) and lower the enclosure bound during the backward walk.
+  Only lines matching the pattern close scopes, so a heredoc terminator or a
+  col-0 string line inside a function does not end the function (a rule
+  "any dedent closes" would).  Without the option only headers close scopes
+  (right for Python, where dedent ends blocks).
 - Multi-line signatures show only their first line.
 - `--sticky-indent` takes precedence over `--sticky-header`.
 - The value of every `--sticky-*` regex option is the whole rest of the argument
@@ -90,7 +101,7 @@ Options:
 | option | meaning |
 |---|---|
 | `--sticky-open=REGEX` | each match opens a scope; the line is that scope's header; enables the engine |
-| `--sticky-close=REGEX` | each match closes a scope |
+| `--sticky-close=REGEX` | each match closes a scope (the same option as in the indentation engine, section 4, where a matching line ends the scopes of headers indented as much or more) |
 | `--sticky-match=REGEX` | only scopes whose opening line matches are shown; others are counted but transparent |
 | `--sticky-ignore=REGEX` | text removed from a line before counting (strings, char literals, line comments) |
 | `--sticky-root=REGEX` | a line known to be at depth 0 (e.g. `^\}`): bounds the backward scan |
@@ -141,7 +152,7 @@ options.  Code: `stickypre.c`.
   allowed in a preset (`--sticky-presets` is not).
 - **Shipped presets**: `lesssticky`, with blocks for Python, shell, Ruby, Lua,
   Makefile, YAML, JSON, HTML/XML, C-family and JS-family curly-bracket
-  languages (by indentation), CSS, Markdown, Org, diffs, INI, LaTeX, roff and
+  languages (by indentation), Markdown, Org, diffs, INI, LaTeX, roff and
   Dockerfile.  POSIX regular expression syntax only.
 
 ## 7. Stage 4: levels from capture groups
@@ -155,7 +166,7 @@ For Markdown, org-mode and similar: `--sticky-level=EXPR` with
 - [x] A. explicit levels, overlay, paging/jump adjustments, docs, test
 - [x] B. indentation engine (`--sticky-indent`, `--sticky-skip`), docs, tests
 - [x] C. preset file (`LESSSTICKYPRESETS`), `--sticky-presets`, shebang patterns, CLI-over-preset slots, shipped `lesssticky`, `make install`
-- [ ] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`)
+- [ ] D. balanced-delimiter engine (`--sticky-open/close/match/ignore/root/lead`); then add the CSS/SCSS/Less preset (hidden from `lesssticky` until then: CSS must use brace counting, not indentation)
 - [ ] E. capture-group levels
 - [ ] F. other makefiles, regenerate `less.man`/`less.hlp`, mouse wheel check
 

@@ -219,6 +219,46 @@ find(l, 'fill')
 check('first matching block wins; missing files in the list are skipped', l, ['a', 'b', 'c', 'fill'])
 l.close()
 
+# --- closing lines (--sticky-close)
+FISH = """#!/bin/bash
+f() {
+    local n=1
+    if [ -z "$1" ]; then
+        echo none
+    elif [ "$1" = a ]; then
+        echo a
+    elif [ "$1" = b ]; then
+        echo b
+    fi
+    cmd arg1 \\
+        arg2 \\
+        arg3
+    cat <<EOT
+        heredoc text
+EOT
+    echo after1
+    echo after2
+}
+"""
+fish = os.path.join(TMP, 'fish.sh')
+open(fish, 'w').write(FISH)
+l = Less('--sticky-presets ' + fish, h=10, w=50, env=ENV)
+find(l, 'arg3')
+check('close: a deeper line after fi is not under the elif', l, ['f() {', 'arg3'])
+find(l, 'echo after2')
+check('close: heredoc terminator at column 0 does not end the function', l, ['f() {', 'echo after2'])
+l.close()
+
+SHOPTS = r"--sticky-indent='^[[:space:]]*(f\(\)|if|elif|else)' --sticky-skip='^[[:space:]]*(#|$)'"
+l = Less(SHOPTS + ' ' + fish, h=10, w=50)
+find(l, 'arg3')
+check('close: without --sticky-close the elif is still the header', l, ['f() {', 'elif [ "$1" = b ]; then', 'arg3'])
+l.close()
+l = Less(SHOPTS + r" --sticky-close='^[[:space:]]*fi' " + fish, h=10, w=50)
+find(l, 'arg3')
+check('close: --sticky-close ends the scope of the elif', l, ['f() {', 'arg3'])
+l.close()
+
 # --- levels without an enclosing header take no row
 l = Less(OPTS + ' ' + outline)
 l.text('/Section2'); l.key('Enter'); l.key('j', 'j', 'j', 'j', 'j', 'j')
