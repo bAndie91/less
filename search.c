@@ -1878,7 +1878,6 @@ static int search_range(POSITION pos, POSITION endpos, int search_type, int matc
 						 */
 						clr_hilite();
 						if (!search_hyphenated)
-							if (!search_hyphenated)
 							hilite_line(linepos + skip_bytes, cline, line_len, chpos, sp, ep, NSP);
 					}
 #endif
