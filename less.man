@@ -1124,7 +1124,9 @@
               tions.
 
        -V or --version
-              Displays the version number of [1mless[22m.
+              Displays the version number of [1mless[22m,  which  regular  expression
+              library  it  was  built with, and (see --hyphen-regexp) how that
+              library recognizes a multibyte character in a pattern.
 
        -w or --hilite-unread
               Temporarily highlights the first  "new"  line  after  a  forward
@@ -1541,37 +1543,48 @@
               what counts as a hyphen at the end of a  line,  instead  of  the
               factory  default:  a  group  capturing  a HYPHEN-MINUS or HYPHEN
               (U+2010) followed by "\s*" for optional trailing whitespace, all
-              as a single unit.  Whitespace around the  hyphen  is  no  longer
-              skipped implicitly; a replacement pattern that needs to allow it
-              has  to say so itself, with its own "\s*" or similar, and should
-              normally include it inside the captured group along with the hy‐
-              phen character, the same way the factory default does,  so  that
-              whitespace is not treated as special: it is simply part of what‐
-              ever  text  is kept or dropped together with the hyphen.  If the
-              pattern has a capturing group of its  own,  that  group  (rather
-              than  the whole pattern) is taken to be the hyphen itself, which
-              lets the rest of the pattern give context without being  consid‐
-              ered  part  of the hyphen; for example "[^aeiou](-)" means a HY‐
-              PHEN-MINUS only counts right after  a  consonant,  without  that
-              consonant  being considered part of the hyphen.  (This is deter‐
-              mined by asking the regular expression library how  many  groups
-              the  compiled  pattern  has,  not  by  guessing from the pattern
-              text.)  A pattern with no group of its own is wrapped in one, so
-              it still ends up being the hyphen in  its  entirety.   An  empty
-              pattern  matches,  with zero width, at the end of every line, so
-              direct joining (as if every line ended in  a  hyphen)  is  tried
-              everywhere; some languages mark a line continuation with nothing
-              at  all,  so this is a legitimate thing to ask for, not a way to
-              turn the feature off (use --no-hyphen-search  for  that).   Note
-              that  "-"  is therefore also just a literal HYPHEN-MINUS pattern
-              here, not a way to clear a previously set pattern  back  to  the
-              factory  default; there is no such way, short of not setting the
-              option in the first place.  To actually pass an empty pattern on
-              the command line, it must be its own argument,  e.g.   [1m--hyphen-[0m
-              [1mregexp  '' [22m: [1m--hyphen-regexp= [22mwith nothing after the "=" instead
-              leaves the option waiting for  a  value  and  swallows  whatever
-              comes  next (even another option) as that value, the same as for
-              any other string-valued option.
+              as a single unit.  Whether a multibyte  character  like  HYPHEN,
+              here or in a replacement pattern, is recognized as one character
+              rather  than  as  its  individual  bytes depends on how [1mless [22mwas
+              built: with the GNU or POSIX regular expression library, it  de‐
+              pends in turn on the runtime locale (the LESSCHARSET environment
+              variable does not affect this, since it controls only [1mless[22m's own
+              display  and line-splitting, a separate mechanism from the regu‐
+              lar expression library's own  locale  handling);  with  PCRE  or
+              PCRE2,  it  follows  [1mless[22m's  own UTF-8 mode instead, which LESS‐
+              CHARSET does affect.  Run [1mless --version [22mto  see  which  applies
+              and,  for  the locale-dependent case, whether the runtime locale
+              is actually a multibyte one.  Whitespace around the hyphen is no
+              longer skipped implicitly; a replacement pattern that  needs  to
+              allow  it  has  to say so itself, with its own "\s*" or similar,
+              and should normally include it inside the captured  group  along
+              with  the  hyphen  character,  the  same way the factory default
+              does, so that whitespace is not treated as special: it is simply
+              part of whatever text is kept or dropped together with  the  hy‐
+              phen.   If  the  pattern  has a capturing group of its own, that
+              group (rather than the whole pattern) is taken to be the  hyphen
+              itself,  which lets the rest of the pattern give context without
+              being considered part of the hyphen; for  example  "[^aeiou](-)"
+              means  a HYPHEN-MINUS only counts right after a consonant, with‐
+              out that consonant being considered part of the  hyphen.   (This
+              is  determined by asking the regular expression library how many
+              groups the compiled pattern has, not by guessing from  the  pat‐
+              tern  text.)   A  pattern with no group of its own is wrapped in
+              one, so it still ends up being the hyphen in its  entirety.   An
+              empty  pattern  matches,  with  zero  width, at the end of every
+              line, so direct joining (as if every line ended in a hyphen)  is
+              tried  everywhere;  some languages mark a line continuation with
+              nothing at all, so this is a legitimate thing to ask for, not  a
+              way  to  turn the feature off (use --no-hyphen-search for that).
+              Note that "-" is therefore also just a literal HYPHEN-MINUS pat‐
+              tern here, not a way to clear a previously set pattern  back  to
+              the  factory default; there is no such way, short of not setting
+              the option in the first place.  To actually pass an  empty  pat‐
+              tern  on  the  command  line,  it must be its own argument, e.g.
+              [1m--hyphen-regexp '' [22m: [1m--hyphen-regexp= [22mwith nothing after the "="
+              instead leaves the option waiting for a value and swallows what‐
+              ever comes next (even another option) as that value, the same as
+              for any other string-valued option.
 
        --linestart-hyphen-regexp
               Some typesetting traditions repeat the hyphen of a compound word

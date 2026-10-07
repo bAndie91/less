@@ -363,6 +363,7 @@ public lbool is_null_pattern(PATTERN_TYPE pattern);
 public int match_pattern(PATTERN_TYPE pattern, constant char *tpattern, constant char *line, size_t line_len, constant char **sp, constant char **ep, int nsp, int notbol, int search_type);
 public constant char * pattern_lib_name(void);
 public int pattern_group_count(PATTERN_TYPE pattern);
+public constant char * pattern_lib_multibyte_info(void);
 public POSITION position(int sindex);
 public void add_forw_pos(POSITION pos);
 public void add_back_pos(POSITION pos);

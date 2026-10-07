@@ -526,6 +526,8 @@ public void opt__V(int type, constant char *s)
 		putstr(" (");
 		putstr(pattern_lib_name());
 		putstr(" regular expressions)\n");
+		putstr(pattern_lib_multibyte_info());
+		putstr("\n");
 		{
 			char constant *copyright = 
 				"Copyright (C) 1984-2024  Mark Nudelman\n\n";

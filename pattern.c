@@ -81,6 +81,7 @@ static int compile_pattern2(constant char *pattern, int search_type, PATTERN_TYP
 	PCRE2_SIZE erroffset;
 	PARG parg;
 	pcre2_code *comp = pcre2_compile((PCRE2_SPTR)pattern, strlen(pattern),
+			((utf_mode) ? PCRE2_UTF | PCRE2_NO_UTF_CHECK : 0) |
 			(is_caseless ? PCRE2_CASELESS : 0),
 			&errcode, &erroffset, NULL);
 	if (comp == NULL)
@@ -519,6 +520,49 @@ public int pattern_group_count(PATTERN_TYPE pattern)
 	(void) pattern;
 	return 0;
 #endif
+#endif
+#endif
+#endif
+}
+
+/*
+ * Describe how (if at all) a multibyte character, e.g. inside a
+ * bracket expression like a hyphen character class, is recognized as
+ * one character rather than as its individual bytes -- for --version
+ * and anyone debugging why a pattern with a non-ASCII literal in it
+ * isn't matching as expected.  This is backend-specific:
+ *   - GNU/POSIX regex consult the C library's runtime locale
+ *     (set once, from the environment, in init_charset()); it works
+ *     only if that locale is a multibyte (e.g. UTF-8) one, which
+ *     LESSCHARSET does not by itself cause -- that only controls
+ *     less's own display/line-splitting, a separate mechanism.
+ *   - PCRE/PCRE2 instead consult less's own utf_mode flag directly
+ *     (itself set from LESSCHARSET or locale autodetection), so they
+ *     don't depend on the C library's locale at all.
+ *   - The remaining backends never recognize a multibyte character as
+ *     one character in a pattern.
+ */
+public constant char * pattern_lib_multibyte_info(void)
+{
+	static char buf[80];
+#if HAVE_GNU_REGEX
+	SNPRINTF1(buf, sizeof(buf),
+		"multibyte chars in patterns follow the runtime locale (MB_CUR_MAX=%d)",
+		(int) MB_CUR_MAX);
+	return buf;
+#else
+#if HAVE_POSIX_REGCOMP
+	SNPRINTF1(buf, sizeof(buf),
+		"multibyte chars in patterns follow the runtime locale (MB_CUR_MAX=%d)",
+		(int) MB_CUR_MAX);
+	return buf;
+#else
+#if HAVE_PCRE2 || HAVE_PCRE
+	return utf_mode ?
+		"multibyte chars in patterns follow less's own UTF-8 mode (on)" :
+		"multibyte chars in patterns follow less's own UTF-8 mode (off: single-byte)";
+#else
+	return "multibyte chars in patterns are not recognized (single-byte only)";
 #endif
 #endif
 #endif

@@ -1225,7 +1225,10 @@ See also the \-\-proc-backspace, \-\-proc-tab,
 and \-\-proc-return options.
 .IP "\-V or \-\-version"
 Displays the version number of
-.BR less .
+.BR less ,
+which regular expression library it was built with, and (see
+\-\-hyphen-regexp) how that library recognizes a multibyte character
+in a pattern.
 .IP "\-w or \-\-hilite-unread"
 Temporarily highlights the first "new" line after a forward movement
 of a full page.
@@ -1681,6 +1684,23 @@ Changes the regular expression used by \-\-hyphen-search to decide
 what counts as a hyphen at the end of a line, instead of the factory
 default: a group capturing a HYPHEN-MINUS or HYPHEN (U+2010) followed
 by "\es*" for optional trailing whitespace, all as a single unit.
+Whether a multibyte character like HYPHEN, here or in a replacement
+pattern, is recognized as one character rather than as its individual
+bytes depends on how
+.B less
+was built: with the GNU or POSIX regular expression library, it
+depends in turn on the runtime locale (the LESSCHARSET environment
+variable does not affect this, since it controls only
+.BR "less" "'s"
+own display and line-splitting, a separate mechanism from the regular
+expression library's own locale handling); with PCRE or PCRE2, it
+follows
+.BR "less" "'s"
+own UTF-8 mode instead, which LESSCHARSET does affect.
+Run
+.B "less --version"
+to see which applies and, for the locale-dependent case, whether the
+runtime locale is actually a multibyte one.
 Whitespace around the hyphen is no longer skipped implicitly; a
 replacement pattern that needs to allow it has to say so itself, with
 its own "\es*" or similar, and should normally include it inside the
