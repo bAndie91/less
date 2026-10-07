@@ -491,3 +491,35 @@ public constant char * pattern_lib_name(void)
 #endif
 #endif
 }
+
+/*
+ * Return the number of capturing groups in a compiled pattern, asking
+ * the regex library itself rather than guessing from the pattern text.
+ * Returns 0 for a library that doesn't expose this (RE_COMP, REGCMP
+ * and V8 regcomp never report anything beyond the whole match anyway).
+ */
+public int pattern_group_count(PATTERN_TYPE pattern)
+{
+#if HAVE_GNU_REGEX
+	return (int) pattern->re_nsub;
+#else
+#if HAVE_POSIX_REGCOMP
+	return (int) pattern->re_nsub;
+#else
+#if HAVE_PCRE2
+	uint32_t count = 0;
+	(void) pcre2_pattern_info(pattern, PCRE2_INFO_CAPTURECOUNT, &count);
+	return (int) count;
+#else
+#if HAVE_PCRE
+	int count = 0;
+	(void) pcre_fullinfo(pattern, NULL, PCRE_INFO_CAPTURECOUNT, &count);
+	return count;
+#else
+	(void) pattern;
+	return 0;
+#endif
+#endif
+#endif
+#endif
+}

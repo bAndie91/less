@@ -1660,52 +1660,80 @@ This option disables that, so a search pattern must match entirely
 within one line, unless the break also qualifies for
 \-\-hyphen-search.
 .IP "\-\-no-hyphen-search"
-If a line break comes right after whatever counts as a hyphen (a
-HYPHEN-MINUS (\-) or HYPHEN (U+2010) by default; see \-\-hyphen-regexp),
-there is no way to tell a genuine hyphenation from two words joined
-with a literal hyphen, so both are tried when searching: the hyphen
-dropped, and the hyphen kept with no space.
+If a line break comes right after whatever counts as a hyphen (see
+\-\-hyphen-regexp), there is no way to tell a genuine hyphenation from
+two words joined with a literal hyphen, so both are tried when
+searching: the hyphen dropped, and the hyphen kept with no space.
 For example, text wrapped as "lorem\-" then "ipsum" is matched by
 either "loremipsum" or "lorem\-ipsum".
+(\-\-linestart-hyphen-regexp can resolve this ambiguity instead of
+leaving both in play; see below.)
 This takes priority over \-\-multiline-search for such a line break,
 whether or not \-\-multiline-search is also on.
-Whichever part of such a match is on each line is highlighted,
-including the hyphen and the whitespace around the break.
+Whichever part of such a match is on each line is highlighted.
 This option disables that, so this kind of line break is instead
 treated as an ordinary \-\-multiline-search break (if that is on), or
 not joined at all (if it is not).
 .IP "\-\-hyphen-regexp"
-Changes the pattern used by \-\-hyphen-search to decide what counts as
-a hyphen at the end of a line, instead of the default HYPHEN-MINUS or
-HYPHEN.
-The pattern is a regular expression which is matched as if
-"(pattern)[ \\t]*$" were used, so it only counts when it (plus any
-trailing whitespace) reaches the end of the line.
+Changes the regular expression used by \-\-hyphen-search to decide
+what counts as a hyphen at the end of a line, instead of the factory
+default: a character class matching a HYPHEN-MINUS or HYPHEN (U+2010),
+followed by "\es*" for optional trailing whitespace.
+Whitespace around the hyphen is no longer skipped implicitly; a
+replacement pattern that needs to allow it has to say so itself, with
+its own "\es*" or similar.
 If the pattern has a capturing group of its own, that group (rather
 than the whole pattern) is taken to be the hyphen itself, which lets
 the rest of the pattern give context without being considered part of
-the hyphen; for example "(?<![aeiou])(\-)" means a HYPHEN-MINUS only
-counts after a consonant.
-Note that "\-" is a literal HYPHEN-MINUS pattern here, not a way to
-clear a previously set pattern; there is no such way, short of
-restarting without the option.
-.IP "\-\-supplementary-hyphen-regexp"
+the hyphen; for example "[^aeiou](\-)" means a HYPHEN-MINUS only
+counts right after a consonant, without that consonant being
+considered part of the hyphen.
+(This is determined by asking the regular expression library how many
+groups the compiled pattern has, not by guessing from the pattern
+text.)
+A pattern with no group of its own is wrapped in one, so it still
+ends up being the hyphen in its entirety.
+An empty pattern matches, with zero width, at the end of every line,
+so direct joining (as if every line ended in a hyphen) is tried
+everywhere; some languages mark a line continuation with nothing at
+all, so this is a legitimate thing to ask for, not a way to turn the
+feature off (use \-\-no-hyphen-search for that).
+Note that "\-" is therefore also just a literal HYPHEN-MINUS pattern
+here, not a way to clear a previously set pattern back to the factory
+default; there is no such way, short of not setting the option in the
+first place.
+To actually pass an empty pattern on the command line, it must be its
+own argument, e.g.
+.B "\-\-hyphen-regexp ''"
+:
+.B "\-\-hyphen-regexp="
+with nothing after the "=" instead leaves the option waiting for a
+value and swallows whatever comes next (even another option) as that
+value, the same as for any other string-valued option.
+.IP "\-\-linestart-hyphen-regexp"
 Some typesetting traditions repeat the hyphen of a compound word at
 the start of the next line, when the word is broken exactly at that
 hyphen, to mark that it's a genuine hyphen rather than a line-break
 artifact: for example "lorem\-" at the end of one line and "\-ipsum" at
 the start of the next, for the one real hyphen in "lorem\-ipsum".
-This option gives the pattern (matched like "^(pattern)", so it only
-counts right at the start of the continuation line, and taking a
-capturing group of its own the same way \-\-hyphen-regexp does) which
-recognizes such a repeated hyphen.
-When it matches, \-\-hyphen-search no longer has to guess between the
-hyphen being genuine or not: the one on the first line is kept and the
-repeated one is dropped, so "lorem\-" / "\-ipsum" is matched only by
-"lorem\-ipsum", not by "loremipsum".
-Empty (which also means there's no way to clear a pattern once set;
-see \-\-hyphen-regexp) by default, which leaves \-\-hyphen-search's
-usual guessing in place.
+This option gives the regular expression (matched like "^pattern", at
+the very start of the continuation line, and taking a capturing group
+of its own the same way \-\-hyphen-regexp does) which recognizes such a
+repeated hyphen; for example, "\es*" followed by a captured
+HYPHEN-MINUS-or-HYPHEN class (as in \-\-hyphen-regexp's factory
+default) allows, but does not require, leading whitespace ahead of
+the repeated hyphen, for duplicated-hyphen typesetting as described
+above.
+When it matches with its captured group non-empty, \-\-hyphen-search no
+longer has to guess between the hyphen being genuine or not: the one
+on the first line is kept and the repeated one is dropped, so
+"lorem\-" / "\-ipsum" is matched only by "lorem\-ipsum", not by
+"loremipsum".
+Empty by default, which, same as \-\-hyphen-regexp, is not a way to
+turn anything off: an empty pattern can only ever match with zero
+width, which is never treated as a hyphen actually having been found,
+so lines are "unmarked" rather than the feature being disabled, and
+\-\-hyphen-search's usual guessing is left in place.
 .IP "\-\-no-number-headers"
 Header lines (defined via the \-\-header option) are not assigned line numbers.
 Line number 1 is assigned to the first line after any header lines.

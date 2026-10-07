@@ -182,7 +182,7 @@ static struct optname nosearch_header_cols_optname = { "no-search-header-columns
 static struct optname no_multiline_search_optname = { "no-multiline-search", NULL };
 static struct optname no_hyphen_search_optname = { "no-hyphen-search", NULL };
 static struct optname hyphen_regexp_optname = { "hyphen-regexp", NULL };
-static struct optname supplementary_hyphen_regexp_optname = { "supplementary-hyphen-regexp", NULL };
+static struct optname linestart_hyphen_regexp_optname = { "linestart-hyphen-regexp", NULL };
 static struct optname redraw_on_quit_optname = { "redraw-on-quit", NULL };
 static struct optname search_type_optname = { "search-options", NULL };
 static struct optname exit_F_on_close_optname = { "exit-follow-on-close", NULL };
@@ -723,9 +723,9 @@ static struct loption option[] =
 		STRING|RAW_STRING|NO_QUERY, 0, NULL, opt_hyphen_regexp,
 		{ "Hyphen regexp: ", NULL, NULL }
 	},
-	{ OLETTER_NONE, &supplementary_hyphen_regexp_optname,
-		STRING|RAW_STRING|NO_QUERY, 0, NULL, opt_supplementary_hyphen_regexp,
-		{ "Supplementary hyphen regexp: ", NULL, NULL }
+	{ OLETTER_NONE, &linestart_hyphen_regexp_optname,
+		STRING|RAW_STRING|NO_QUERY, 0, NULL, opt_linestart_hyphen_regexp,
+		{ "Linestart hyphen regexp: ", NULL, NULL }
 	},
 	{ OLETTER_NONE, &redraw_on_quit_optname,
 		BOOL, OPT_OFF, &redraw_on_quit, NULL,

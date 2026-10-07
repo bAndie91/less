@@ -155,7 +155,12 @@ l.text('/lorem- ipsum'); l.key('Enter')
 check_found('--no-hyphen-search still joins the break as plain word-wrap (with a space)', l)
 l.close()
 
-# --- --hyphen-regexp overrides what counts as a hyphen ---
+# --- --hyphen-regexp overrides what counts as a hyphen.  Whitespace
+# around the marker is no longer skipped implicitly: the pattern has
+# to say so itself (the factory default is "([-‐])\s*", so this
+# still works out of the box; a custom pattern that cares about
+# trailing whitespace has to include its own "\s*" too, as this one
+# does not need to since "~~" always directly abuts the line end here). ---
 regexpf = os.path.join(TMP, 'regexp.txt')
 open(regexpf, 'w').write(
     'intro line\nfiller 0\nfiller 1\nfiller 2\n'
@@ -186,63 +191,115 @@ l.text('/loremipsum'); l.key('Enter')
 check_found('--hyphen-regexp=\'-\' is a literal pattern, not a "clear" sentinel', l)
 l.close()
 
+# An empty --hyphen-regexp isn't "off" either: it matches with zero
+# width at the end of every line, so direct (no-space) joining is
+# tried everywhere, as if every line ended in a hyphen.  It has to be
+# passed as its own argument -- "--hyphen-regexp ''" -- since
+# "--hyphen-regexp=" with nothing after the "=" instead waits for a
+# value and swallows whatever comes next, same as any STRING option.
+emptyf = os.path.join(TMP, 'empty.txt')
+open(emptyf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'foo\nbar baz\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less("--hyphen-regexp '' --no-multiline-search " + emptyf)
+l.text('/foobar'); l.key('Enter')
+check_found('--hyphen-regexp \'\': every line is treated as ending in a hyphen', l)
+check_hilite('--hyphen-regexp \'\': hilite covers both sides directly, no gap', l,
+             '\x1b[7mfoo\x1b[0m\n\x1b[7mbar\x1b[0m baz')
+l.close()
+
+l = Less('--no-multiline-search ' + emptyf)
+l.text('/foobar'); l.key('Enter')
+check_not_found('--hyphen-regexp factory default: a plain line ending is not a hyphen', l)
+l.close()
+
 # --- --hyphen-regexp: a pattern with its own capture group uses that
 # group (not the whole match) as the hyphen, so context can gate it
 # without being considered part of the hyphen itself.  (A lookbehind
 # like the one in the feature request, e.g. "(?<![aeiou])(-)", needs
-# PCRE; this build may only have POSIX ERE, which has no lookaround,
-# so "[0-9](-)" -- a hyphen right after a digit -- exercises the same
-# capture-group logic in a way that compiles everywhere.)
-digitf = os.path.join(TMP, 'digit.txt')
-open(digitf, 'w').write(
+# PCRE; this build may only have POSIX ERE, which has no lookaround, so
+# "[^aeiou](-)" -- a hyphen right after a consonant -- exercises the
+# same capture-group logic in a way that compiles everywhere, and
+# doesn't claim to consume the lookbehind either way since there isn't
+# one: the consonant is consumed by group 0 but excluded from group 1.)
+consonantf = os.path.join(TMP, 'consonant.txt')
+open(consonantf, 'w').write(
     'intro line\nfiller 0\nfiller 1\nfiller 2\n'
-    'chapterx-\nsection two\n'
-    'chapter2-\nsection one\n'
+    'chaptera-\nsection two\n'
+    'chapterb-\nsection one\n'
     + ''.join('tail %d\n' % i for i in range(20)))
 
-l = Less(r"--hyphen-regexp='[0-9](-)' " + digitf)
-l.text('/chapterxsection'); l.key('Enter')
-check_not_found('--hyphen-regexp capture group: hyphen after a letter does not count', l)
+l = Less(r"--hyphen-regexp='[^aeiou](-)' " + consonantf)
+l.text('/chapterasection'); l.key('Enter')
+check_not_found('--hyphen-regexp capture group: hyphen after a vowel does not count', l)
 l.close()
 
-l = Less(r"--hyphen-regexp='[0-9](-)' " + digitf)
-l.text('/chapter2section'); l.key('Enter')
-check_found('--hyphen-regexp capture group: hyphen after a digit counts', l)
+l = Less(r"--hyphen-regexp='[^aeiou](-)' " + consonantf)
+l.text('/chapterbsection'); l.key('Enter')
+check_found('--hyphen-regexp capture group: hyphen after a consonant counts', l)
 l.close()
 
-# --- --supplementary-hyphen-regexp: a hyphen repeated at the start of
-# the continuation line resolves the usual hyphen ambiguity instead of
-# guessing both ways ---
-suppf = os.path.join(TMP, 'supplementary.txt')
+# A pattern with no group of its own is still wrapped in one: the
+# whole "[0-9]-" is taken as the hyphen (has_capture_group() asks the
+# regex library itself, via pattern_group_count(), not a text guess,
+# so it correctly sees no group here and wraps it).
+nogroupf = os.path.join(TMP, 'nogroup.txt')
+open(nogroupf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\nchapter2-\nsection one\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(r"--hyphen-regexp='[0-9]-' " + nogroupf)
+l.text('/chaptersection'); l.key('Enter')
+check_found('--hyphen-regexp without its own group: whole pattern is still the hyphen', l)
+l.close()
+
+# --- --linestart-hyphen-regexp: a hyphen repeated at the start of the
+# continuation line resolves the usual hyphen ambiguity instead of
+# guessing both ways.  Off (well, "unmarked": see below) by default. ---
+suppf = os.path.join(TMP, 'linestart.txt')
 open(suppf, 'w').write(
     'intro line\nfiller 0\nfiller 1\nfiller 2\n'
     'lorem-\n-ipsum dolor\n'
     + ''.join('tail %d\n' % i for i in range(20)))
 
-l = Less(r"--supplementary-hyphen-regexp='-' " + suppf)
+# Point 6's duplicated-hyphen example: allow (but don't require, and
+# don't capture) leading whitespace ahead of the repeated hyphen.
+l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
 l.text('/lorem-ipsum'); l.key('Enter')
-check_found('--supplementary-hyphen-regexp: repeated hyphen resolves to one hyphen', l)
-check_hilite('--supplementary-hyphen-regexp: hilite covers both markers', l,
+check_found('--linestart-hyphen-regexp: repeated hyphen resolves to one hyphen', l)
+check_hilite('--linestart-hyphen-regexp: hilite covers both markers', l,
              '\x1b[7mlorem-\x1b[0m\n\x1b[7m-ipsum\x1b[0m')
 l.close()
 
-l = Less(r"--supplementary-hyphen-regexp='-' " + suppf)
+l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
 l.text('/loremipsum'); l.key('Enter')
-check_not_found('--supplementary-hyphen-regexp: dehyphenated form no longer matches', l)
+check_not_found('--linestart-hyphen-regexp: dehyphenated form no longer matches', l)
 l.close()
 
-l = Less(r"--supplementary-hyphen-regexp='-' " + suppf)
+l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
 l.text('/lorem--ipsum'); l.key('Enter')
-check_not_found('--supplementary-hyphen-regexp: double hyphen does not match either', l)
+check_not_found('--linestart-hyphen-regexp: double hyphen does not match either', l)
 l.close()
 
-# off by default: without the option, the usual ambiguous guessing
-# applies instead, and "-ipsum" keeps its own leading hyphen (it's just
-# part of the continuation text now), so only the single-hyphen form
-# -- dehyphenating side_a but not side_b -- is still found.
+# off (unmarked) by default: the usual ambiguous guessing applies
+# instead, and "-ipsum" keeps its own leading hyphen (it's just part
+# of the continuation text now), so only the single-hyphen form --
+# dehyphenating side_a but not side_b -- is still found.
 l = Less(suppf)
 l.text('/lorem-ipsum'); l.key('Enter')
-check_found('--supplementary-hyphen-regexp off by default: plain dehyphenation still works', l)
+check_found('--linestart-hyphen-regexp unmarked by default: plain dehyphenation still works', l)
+l.close()
+
+# An explicitly empty --linestart-hyphen-regexp (passed as its own
+# argument -- see the --hyphen-regexp note above) behaves exactly like
+# the unset default, since both compile to a pattern that can only
+# ever match with zero width, which is never treated as a genuine
+# marker: lines are "unmarked", not switched on, by an empty pattern.
+l = Less("--linestart-hyphen-regexp '' " + suppf)
+l.text('/lorem-ipsum'); l.key('Enter')
+check_found("--linestart-hyphen-regexp '': same as the unmarked default", l)
 l.close()
 
 # --- word split by HYPHEN-MINUS ('-'), as a special case of the above
