@@ -1212,6 +1212,21 @@ public void opt_hyphen_regexp(int type, constant char *s)
 	}
 }
 
+/*
+ * Handler for the --supplementary-hyphen-regexp option.
+ */
+	/*ARGSUSED*/
+public void opt_supplementary_hyphen_regexp(int type, constant char *s)
+{
+	switch (type)
+	{
+	case INIT:
+	case TOGGLE:
+		(void) set_supplementary_hyphen_regexp(s);
+		break;
+	}
+}
+
 #if LESSTEST
 /*
  * Handler for the --tty option.

@@ -174,9 +174,75 @@ l.text('/lorem~~ipsum'); l.key('Enter')
 check_found('--hyphen-regexp: custom marker, literal form is also found', l)
 l.close()
 
-l = Less(r"--hyphen-regexp=- " + regexpf)  # "-" resets to the default
+l = Less(r"--hyphen-regexp='~~' " + dualf)
 l.text('/loremipsum'); l.key('Enter')
-check_not_found('--hyphen-regexp=- resets to the default, so "~~" no longer counts', l)
+check_not_found('--hyphen-regexp: once overridden to "~~", a plain "-" no longer counts', l)
+l.close()
+
+# "-" is a literal pattern here, not a sentinel that clears/resets it
+# (it's also the single most likely literal value someone would set).
+l = Less(r"--hyphen-regexp='-' " + dualf)
+l.text('/loremipsum'); l.key('Enter')
+check_found('--hyphen-regexp=\'-\' is a literal pattern, not a "clear" sentinel', l)
+l.close()
+
+# --- --hyphen-regexp: a pattern with its own capture group uses that
+# group (not the whole match) as the hyphen, so context can gate it
+# without being considered part of the hyphen itself.  (A lookbehind
+# like the one in the feature request, e.g. "(?<![aeiou])(-)", needs
+# PCRE; this build may only have POSIX ERE, which has no lookaround,
+# so "[0-9](-)" -- a hyphen right after a digit -- exercises the same
+# capture-group logic in a way that compiles everywhere.)
+digitf = os.path.join(TMP, 'digit.txt')
+open(digitf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'chapterx-\nsection two\n'
+    'chapter2-\nsection one\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(r"--hyphen-regexp='[0-9](-)' " + digitf)
+l.text('/chapterxsection'); l.key('Enter')
+check_not_found('--hyphen-regexp capture group: hyphen after a letter does not count', l)
+l.close()
+
+l = Less(r"--hyphen-regexp='[0-9](-)' " + digitf)
+l.text('/chapter2section'); l.key('Enter')
+check_found('--hyphen-regexp capture group: hyphen after a digit counts', l)
+l.close()
+
+# --- --supplementary-hyphen-regexp: a hyphen repeated at the start of
+# the continuation line resolves the usual hyphen ambiguity instead of
+# guessing both ways ---
+suppf = os.path.join(TMP, 'supplementary.txt')
+open(suppf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'lorem-\n-ipsum dolor\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(r"--supplementary-hyphen-regexp='-' " + suppf)
+l.text('/lorem-ipsum'); l.key('Enter')
+check_found('--supplementary-hyphen-regexp: repeated hyphen resolves to one hyphen', l)
+check_hilite('--supplementary-hyphen-regexp: hilite covers both markers', l,
+             '\x1b[7mlorem-\x1b[0m\n\x1b[7m-ipsum\x1b[0m')
+l.close()
+
+l = Less(r"--supplementary-hyphen-regexp='-' " + suppf)
+l.text('/loremipsum'); l.key('Enter')
+check_not_found('--supplementary-hyphen-regexp: dehyphenated form no longer matches', l)
+l.close()
+
+l = Less(r"--supplementary-hyphen-regexp='-' " + suppf)
+l.text('/lorem--ipsum'); l.key('Enter')
+check_not_found('--supplementary-hyphen-regexp: double hyphen does not match either', l)
+l.close()
+
+# off by default: without the option, the usual ambiguous guessing
+# applies instead, and "-ipsum" keeps its own leading hyphen (it's just
+# part of the continuation text now), so only the single-hyphen form
+# -- dehyphenating side_a but not side_b -- is still found.
+l = Less(suppf)
+l.text('/lorem-ipsum'); l.key('Enter')
+check_found('--supplementary-hyphen-regexp off by default: plain dehyphenation still works', l)
 l.close()
 
 # --- word split by HYPHEN-MINUS ('-'), as a special case of the above

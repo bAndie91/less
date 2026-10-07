@@ -1681,7 +1681,31 @@ HYPHEN.
 The pattern is a regular expression which is matched as if
 "(pattern)[ \\t]*$" were used, so it only counts when it (plus any
 trailing whitespace) reaches the end of the line.
-A "\-" resets it to the default.
+If the pattern has a capturing group of its own, that group (rather
+than the whole pattern) is taken to be the hyphen itself, which lets
+the rest of the pattern give context without being considered part of
+the hyphen; for example "(?<![aeiou])(\-)" means a HYPHEN-MINUS only
+counts after a consonant.
+Note that "\-" is a literal HYPHEN-MINUS pattern here, not a way to
+clear a previously set pattern; there is no such way, short of
+restarting without the option.
+.IP "\-\-supplementary-hyphen-regexp"
+Some typesetting traditions repeat the hyphen of a compound word at
+the start of the next line, when the word is broken exactly at that
+hyphen, to mark that it's a genuine hyphen rather than a line-break
+artifact: for example "lorem\-" at the end of one line and "\-ipsum" at
+the start of the next, for the one real hyphen in "lorem\-ipsum".
+This option gives the pattern (matched like "^(pattern)", so it only
+counts right at the start of the continuation line, and taking a
+capturing group of its own the same way \-\-hyphen-regexp does) which
+recognizes such a repeated hyphen.
+When it matches, \-\-hyphen-search no longer has to guess between the
+hyphen being genuine or not: the one on the first line is kept and the
+repeated one is dropped, so "lorem\-" / "\-ipsum" is matched only by
+"lorem\-ipsum", not by "loremipsum".
+Empty (which also means there's no way to clear a pattern once set;
+see \-\-hyphen-regexp) by default, which leaves \-\-hyphen-search's
+usual guessing in place.
 .IP "\-\-no-number-headers"
 Header lines (defined via the \-\-header option) are not assigned line numbers.
 Line number 1 is assigned to the first line after any header lines.

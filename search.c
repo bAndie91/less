@@ -153,6 +153,13 @@ static struct pattern_info search_info;
  * hyphen_regexp_detect().
  */
 static struct pattern_info hyphen_regexp_info;
+/*
+ * The pattern used to recognize a "supplementary hyphen" repeated at
+ * the start of a continuation line, set by --supplementary-hyphen-regexp.
+ * Empty (no pattern set) by default, meaning the feature is off; see
+ * supplementary_hyphen_detect().
+ */
+static struct pattern_info supplementary_hyphen_info;
 public int is_caseless;
 
 /*
@@ -233,37 +240,102 @@ public void init_search(void)
 {
 	init_pattern(&search_info);
 	init_pattern(&hyphen_regexp_info);
+	init_pattern(&supplementary_hyphen_info);
 }
 
 /*
- * Set (or, with NULL or "-", clear) the regexp used to recognize a
- * hyphenated line break for --hyphen-search.  It is wrapped as
- * "(pattern)[ \t]*$" so it can be matched against a whole line and
- * still only be considered a hit when it (plus optional trailing
- * whitespace) reaches the end of the line; group 1 then delimits the
- * hyphen-like text itself.
+ * Does pattern contain an unescaped '(', the start of a capturing
+ * group in every regex syntax less might be compiled with (POSIX ERE,
+ * PCRE, GNU regex all treat a bare '(' this way)?
+ * ponytail: doesn't account for a literal '(' inside a bracket
+ * expression like "[(]"; good enough for a short hyphen pattern.
+ */
+static lbool has_capture_group(constant char *pattern)
+{
+	for ( ;  *pattern != '\0';  pattern++)
+	{
+		if (*pattern == '\\' && pattern[1] != '\0')
+		{
+			pattern++;
+			continue;
+		}
+		if (*pattern == '(')
+			return (TRUE);
+	}
+	return (FALSE);
+}
+
+/*
+ * Set a regexp used to recognize a hyphen-like marker at a line break,
+ * anchoring it with prefix and suffix (e.g. "^" and "" to match at the
+ * start of a line, or "" and "[ \t]*$" to match at the end of one).
+ *
+ * Unlike most other string options, "-" does NOT mean "clear": it's
+ * also the single most likely literal pattern someone would set here
+ * (an actual HYPHEN-MINUS).  There's no user-facing way to clear a
+ * pattern once set (the command line's "option=" and the "-" command's
+ * empty input both mean "no value given" rather than "empty string"),
+ * so the only way back to the unset default is to not set it in the
+ * first place; a NULL or empty pattern is accepted here only for
+ * callers other than the normal option-parsing path.
+ *
+
+ * If pattern has a capturing group of its own (see has_capture_group()),
+ * it's used as-is and that group (always numbered 1, the first one
+ * that opens, regardless of how many non-capturing groups or
+ * lookarounds precede it) delimits the hyphen-like text; otherwise the
+ * whole pattern is wrapped in a group of its own, so it still ends up
+ * as group 1.  This lets e.g. "(?<![aeiou])(-)" mean "only a hyphen
+ * following a consonant", without the lookbehind being considered
+ * part of the hyphen itself.
+ *
  * compiling it can perturb the shared is_caseless flag (set_pattern()
  * recomputes it from the pattern's own case), so it's saved and
  * restored around the call to avoid affecting the main search pattern.
  */
-public int set_hyphen_regexp(constant char *pattern)
+static int set_anchored_regexp(struct pattern_info *info, constant char *pattern,
+	constant char *prefix, constant char *suffix)
 {
 	int save_is_caseless = is_caseless;
 	int result;
 
-	if (pattern == NULL || strcmp(pattern, "-") == 0)
+	if (pattern == NULL || pattern[0] == '\0')
 	{
-		clear_pattern(&hyphen_regexp_info);
-		result = 0;
-	} else
+		clear_pattern(info);
+		is_caseless = save_is_caseless;
+		return (0);
+	}
 	{
-		char *wrapped = (char *) ecalloc(1, strlen(pattern) + 16);
-		sprintf(wrapped, "(%s)[ \t]*$", pattern);
-		result = set_pattern(&hyphen_regexp_info, wrapped, 0, 1);
+		char *wrapped = (char *) ecalloc(1, strlen(prefix) + strlen(pattern) + strlen(suffix) + 4);
+		if (has_capture_group(pattern))
+			sprintf(wrapped, "%s%s%s", prefix, pattern, suffix);
+		else
+			sprintf(wrapped, "%s(%s)%s", prefix, pattern, suffix);
+		result = set_pattern(info, wrapped, 0, 1);
 		free(wrapped);
 	}
 	is_caseless = save_is_caseless;
 	return result;
+}
+
+/*
+ * Handler for --hyphen-regexp; see set_anchored_regexp() and
+ * hyphen_regexp_detect().
+ */
+public int set_hyphen_regexp(constant char *pattern)
+{
+	return set_anchored_regexp(&hyphen_regexp_info, pattern, "", "[ \t]*$");
+}
+
+/*
+ * Handler for --supplementary-hyphen-regexp; see set_anchored_regexp()
+ * and supplementary_hyphen_detect().  Unlike --hyphen-regexp, an empty
+ * pattern (the default) isn't a fallback to some hard-coded check: it
+ * just means the feature is off.
+ */
+public int set_supplementary_hyphen_regexp(constant char *pattern)
+{
+	return set_anchored_regexp(&supplementary_hyphen_info, pattern, "^", "");
 }
 
 /*
@@ -1638,6 +1710,34 @@ static lbool hyphen_regexp_detect(constant char *side_a, size_t a_len,
 }
 
 /*
+ * Does side_b, right after its leading whitespace (skip_len bytes),
+ * begin with a "supplementary hyphen": a hyphen repeated at the start
+ * of a continuation line to mark that the hyphen at the end of the
+ * previous line is a genuine part of the word, not just a line-break
+ * artifact (as some typesetting traditions do for compound words,
+ * e.g. "lorem-" / "-ipsum" for the one real hyphen in "lorem-ipsum").
+ * Off by default; only matches if --supplementary-hyphen-regexp has
+ * set a pattern, anchored as "^(pattern)" so it only counts right at
+ * the start of side_b's real content.  On success, sets *p_supp_len to
+ * the length of that match and returns TRUE.
+ */
+static lbool supplementary_hyphen_detect(constant char *side_b, size_t b_len, size_t skip_len,
+	size_t *p_supp_len)
+{
+	constant char *ssp[3];
+	constant char *sep[3];
+
+	if (!prev_pattern(&supplementary_hyphen_info))
+		return (FALSE);
+	if (!match_pattern(info_compiled(&supplementary_hyphen_info), supplementary_hyphen_info.text,
+			side_b + skip_len, b_len - skip_len, ssp, sep, 3, 0, supplementary_hyphen_info.search_type) ||
+	    ssp[1] == NULL || sep[1] == NULL)
+		return (FALSE);
+	*p_supp_len = ptr_diff(sep[1], side_b + skip_len);
+	return (TRUE);
+}
+
+/*
  * Holds the state needed to highlight the far side of a match that was
  * found by joining the line search_range() is currently processing with
  * the line adjacent to it.  Filled in by a successful multiline_match();
@@ -1745,7 +1845,12 @@ static lbool try_multiline_join(constant char *side_a, size_t a_len,
  * "lorem-\nipsum" is found by "loremipsum"), and the hyphen kept with
  * no space (so it's also found by "lorem-ipsum"). This takes priority
  * over the plain word-wrap join for that break, whether or not
- * --multiline-search is also on.
+ * --multiline-search is also on.  But if the continuation line starts
+ * with a --supplementary-hyphen-regexp match (see
+ * supplementary_hyphen_detect()), that ambiguity is resolved instead
+ * of guessed at: the hyphen on side_a is kept, and the repeated one at
+ * the start of side_b is dropped, so "lorem-\n-ipsum" is found only by
+ * "lorem-ipsum".
  *
  * adjacent_pos is the position of the adjacent line: for a forward
  * search this is the position just past cline (as left in "pos" by the
@@ -1836,8 +1941,20 @@ static int multiline_match(constant char *cline, size_t line_len, POSITION adjac
 		(hyphen_search && hyphen_regexp_detect(side_a, a_len, &hyphen_end, &content_end));
 
 	if (have_hyphen)
-		ok = try_multiline_join(side_a, hyphen_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip) ||
-		     try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip);
+	{
+		size_t supp_len;
+		if (supplementary_hyphen_detect(side_b, b_len, mip->skip_len, &supp_len))
+			/*
+			 * The continuation line repeats the hyphen, so there's no
+			 * ambiguity left: keep exactly the one hyphen already on
+			 * side_a, and skip past the repeated one on side_b too.
+			 */
+			ok = try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len,
+				mip->skip_len + supp_len, search_type, mip);
+		else
+			ok = try_multiline_join(side_a, hyphen_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip) ||
+			     try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip);
+	}
 	else if (multiline_search)
 	{
 		static constant char space[1] = { ' ' };
