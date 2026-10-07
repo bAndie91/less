@@ -1662,12 +1662,14 @@ within one line, unless the break also qualifies for
 .IP "\-\-no-hyphen-search"
 If a line break comes right after whatever counts as a hyphen (see
 \-\-hyphen-regexp), there is no way to tell a genuine hyphenation from
-two words joined with a literal hyphen, so both are tried when
-searching: the hyphen dropped, and the hyphen kept with no space.
+two words joined with a literal hyphen, so every applicable way of
+keeping or dropping it is tried when searching.
 For example, text wrapped as "lorem\-" then "ipsum" is matched by
-either "loremipsum" or "lorem\-ipsum".
-(\-\-linestart-hyphen-regexp can resolve this ambiguity instead of
-leaving both in play; see below.)
+either "loremipsum" (hyphen dropped) or "lorem\-ipsum" (hyphen kept,
+no space); if the continuation line also starts with a
+\-\-linestart-hyphen-regexp match (see below), that marker is
+similarly tried both kept and dropped, so "lorem\-" then "\-ipsum" is
+matched by "loremipsum", "lorem\-ipsum", or "lorem\-\-ipsum" alike.
 This takes priority over \-\-multiline-search for such a line break,
 whether or not \-\-multiline-search is also on.
 Whichever part of such a match is on each line is highlighted.
@@ -1677,11 +1679,15 @@ not joined at all (if it is not).
 .IP "\-\-hyphen-regexp"
 Changes the regular expression used by \-\-hyphen-search to decide
 what counts as a hyphen at the end of a line, instead of the factory
-default: a character class matching a HYPHEN-MINUS or HYPHEN (U+2010),
-followed by "\es*" for optional trailing whitespace.
+default: a group capturing a HYPHEN-MINUS or HYPHEN (U+2010) followed
+by "\es*" for optional trailing whitespace, all as a single unit.
 Whitespace around the hyphen is no longer skipped implicitly; a
 replacement pattern that needs to allow it has to say so itself, with
-its own "\es*" or similar.
+its own "\es*" or similar, and should normally include it inside the
+captured group along with the hyphen character, the same way the
+factory default does, so that whitespace is not treated as special:
+it is simply part of whatever text is kept or dropped together with
+the hyphen.
 If the pattern has a capturing group of its own, that group (rather
 than the whole pattern) is taken to be the hyphen itself, which lets
 the rest of the pattern give context without being considered part of
@@ -1719,21 +1725,21 @@ the start of the next, for the one real hyphen in "lorem\-ipsum".
 This option gives the regular expression (matched like "^pattern", at
 the very start of the continuation line, and taking a capturing group
 of its own the same way \-\-hyphen-regexp does) which recognizes such a
-repeated hyphen; for example, "\es*" followed by a captured
-HYPHEN-MINUS-or-HYPHEN class (as in \-\-hyphen-regexp's factory
-default) allows, but does not require, leading whitespace ahead of
-the repeated hyphen, for duplicated-hyphen typesetting as described
+repeated hyphen, as another thing to try keeping or dropping (see
+\-\-no-hyphen-search above) in addition to the one at the end of the
+previous line; for example, a captured HYPHEN-MINUS-or-HYPHEN class
+(as in \-\-hyphen-regexp's factory default) preceded by "\es*" outside
+the group, allowing but not requiring leading whitespace ahead of the
+repeated hyphen, recognizes duplicated-hyphen typesetting as described
 above.
-When it matches with its captured group non-empty, \-\-hyphen-search no
-longer has to guess between the hyphen being genuine or not: the one
-on the first line is kept and the repeated one is dropped, so
-"lorem\-" / "\-ipsum" is matched only by "lorem\-ipsum", not by
-"loremipsum".
-Empty by default, which, same as \-\-hyphen-regexp, is not a way to
-turn anything off: an empty pattern can only ever match with zero
-width, which is never treated as a hyphen actually having been found,
-so lines are "unmarked" rather than the feature being disabled, and
-\-\-hyphen-search's usual guessing is left in place.
+The factory default, "(\es*)", matches exactly the leading whitespace
+that an ordinary \-\-multiline-search join already skips, so by itself
+it changes nothing; replacing it with a pattern that looks for an
+actual marker is what makes a difference.
+(An empty pattern is not equivalent to this default: it matches with
+zero width regardless of any leading whitespace actually present,
+rather than matching that whitespace, so it can introduce a join that
+keeps the whitespace as literal text where the default would not.)
 .IP "\-\-no-number-headers"
 Header lines (defined via the \-\-header option) are not assigned line numbers.
 Line number 1 is assigned to the first line after any header lines.

@@ -244,9 +244,21 @@ static void init_pattern(struct pattern_info *info)
 /*
  * The factory default for --hyphen-regexp: a HYPHEN-MINUS or HYPHEN,
  * followed by explicit (not implicit -- see set_anchored_regexp())
- * optional whitespace.
+ * optional whitespace, with that whitespace included in the captured
+ * group along with the hyphen itself, so it's just more of "the
+ * hyphen" rather than being treated specially.
  */
-#define DEFAULT_HYPHEN_REGEXP "([-\xe2\x80\x90])\\s*"
+#define DEFAULT_HYPHEN_REGEXP "([-\xe2\x80\x90]\\s*)"
+
+/*
+ * The factory default for --linestart-hyphen-regexp: optional
+ * whitespace, and nothing else.  This matches exactly what the
+ * general (non-hyphen) multiline join already treats as leading
+ * whitespace to skip, so by default it never changes which join
+ * candidates get tried (see multiline_match()); only a pattern that
+ * also looks for an actual repeated-hyphen marker does that.
+ */
+#define DEFAULT_LINESTART_HYPHEN_REGEXP "(\\s*)"
 
 /*
  * Initialize search variables.
@@ -257,7 +269,7 @@ public void init_search(void)
 	init_pattern(&hyphen_regexp_info);
 	init_pattern(&linestart_hyphen_info);
 	(void) set_hyphen_regexp(DEFAULT_HYPHEN_REGEXP);
-	(void) set_linestart_hyphen_regexp("");
+	(void) set_linestart_hyphen_regexp(DEFAULT_LINESTART_HYPHEN_REGEXP);
 }
 
 /*
@@ -1706,22 +1718,24 @@ static lbool hyphen_regexp_detect(constant char *side_a, size_t a_len,
 }
 
 /*
- * Does side_b begin with a hyphen repeated at the start of a
- * continuation line (see --linestart-hyphen-regexp), marking that the
- * hyphen at the end of the previous line is a genuine part of the
- * word rather than a line-break artifact (as some typesetting
+ * Does side_b begin with whatever --linestart-hyphen-regexp recognizes
+ * as a hyphen repeated at the start of a continuation line, marking
+ * that the hyphen at the end of the previous line is a genuine part
+ * of the word rather than a line-break artifact (as some typesetting
  * traditions do for a compound word broken exactly at its own hyphen,
  * e.g. "lorem-" / "-ipsum" for the one real hyphen in "lorem-ipsum")?
  *
  * linestart_hyphen_info always has some pattern compiled; the factory
- * default is empty, which can only match with zero width and so can
- * never mark anything -- lines are "unmarked" by default, rather than
- * this being an on/off switch.  A zero-width match (group 1 empty) is
- * therefore not treated as a marker found.  On an actual match, sets
+ * default, "(\s*)", matches exactly the leading whitespace that
+ * mip->skip_len (skip_break_space()) already accounts for, so by
+ * default *p_skip_len always comes out equal to that and changes
+ * nothing (see multiline_match()); a pattern that looks for an actual
+ * marker, such as a repeated hyphen, is what changes *p_skip_len to
+ * something multiline_match() hasn't already tried.  On a match, sets
  * *p_skip_len to how much of the start of side_b to skip -- the
- * marker itself, plus anything matched (but not necessarily captured)
- * ahead of it, such as leading whitespace matched by the pattern's
- * own explicit "\s*" -- and returns TRUE.
+ * marker, plus anything matched (but not necessarily captured) ahead
+ * of it -- and returns TRUE; the match can be zero width (nothing to
+ * skip), which is a normal result, not a failure.
  */
 static lbool linestart_hyphen_detect(constant char *side_b, size_t b_len, size_t *p_skip_len)
 {
@@ -1730,7 +1744,7 @@ static lbool linestart_hyphen_detect(constant char *side_b, size_t b_len, size_t
 
 	if (!match_pattern(info_compiled(&linestart_hyphen_info), linestart_hyphen_info.text,
 			side_b, b_len, ssp, sep, 3, 0, linestart_hyphen_info.search_type) ||
-	    ssp[1] == NULL || sep[1] == NULL || sep[1] == ssp[1])
+	    ssp[1] == NULL || sep[1] == NULL)
 		return (FALSE);
 	*p_skip_len = ptr_diff(sep[1], side_b);
 	return (TRUE);
@@ -1838,18 +1852,17 @@ static lbool try_multiline_join(constant char *side_a, size_t a_len,
  * with normal word spacing.
  *
  * If --hyphen-search is on and the break is right after whatever
- * counts as a hyphen (see hyphen_regexp_detect()), two things are
- * tried instead, since there's no way to tell a genuine hyphenation
- * from two words joined with a literal hyphen: the hyphen dropped (so
- * "lorem-\nipsum" is found by "loremipsum"), and the hyphen kept with
- * no space (so it's also found by "lorem-ipsum"). This takes priority
- * over the plain word-wrap join for that break, whether or not
- * --multiline-search is also on.  But if the continuation line starts
- * with a genuine --linestart-hyphen-regexp match (see
- * linestart_hyphen_detect()), that ambiguity is resolved instead of
- * guessed at: the hyphen on side_a is kept, and the repeated one at
- * the start of side_b is dropped, so "lorem-\n-ipsum" is found only by
- * "lorem-ipsum".
+ * counts as a hyphen (see hyphen_regexp_detect()), that takes priority
+ * over the plain word-wrap join for that break (whether or not
+ * --multiline-search is also on), and every applicable combination of
+ * keeping or dropping the hyphen on each side is tried, since there's
+ * no way to tell which, if any, is the one genuine word: the hyphen
+ * dropped (so "lorem-\nipsum" is found by "loremipsum"), and the
+ * hyphen kept with no space (so it's also found by "lorem-ipsum"). If
+ * the continuation line also starts with a --linestart-hyphen-regexp
+ * match (see linestart_hyphen_detect()), that marker is similarly
+ * tried both kept and dropped, so "lorem-\n-ipsum" is found by
+ * "loremipsum", "lorem-ipsum", and "lorem--ipsum" alike.
  *
  * adjacent_pos is the position of the adjacent line: for a forward
  * search this is the position just past cline (as left in "pos" by the
@@ -1941,20 +1954,26 @@ static int multiline_match(constant char *cline, size_t line_len, POSITION adjac
 
 	if (have_hyphen)
 	{
+		/*
+		 * There are up to two independent choices to make: whether to
+		 * keep or drop the hyphen on side_a (hyphen_end drops it,
+		 * content_end keeps it), and, if --linestart-hyphen-regexp
+		 * recognizes a repeated hyphen at the start of side_b, whether
+		 * to keep or drop that one too (mip->skip_len keeps it,
+		 * linestart_skip_len drops it).  All combinations that apply
+		 * are tried, e.g. for "lorem-" / "-ipsum": "loremipsum" (drop
+		 * both), "lorem-ipsum" (keep exactly one), and "lorem--ipsum"
+		 * (keep both) -- there's no way to know which, if any, is the
+		 * one genuine word, so all are offered to match against.
+		 */
 		size_t linestart_skip_len;
-		if (linestart_hyphen_detect(side_b, b_len, &linestart_skip_len))
-			/*
-			 * The continuation line repeats the hyphen, so there's no
-			 * ambiguity left: keep exactly the one hyphen already on
-			 * side_a, and skip past whatever --linestart-hyphen-regexp
-			 * matched (the repeated hyphen, and anything ahead of it,
-			 * such as leading whitespace) on side_b too.
-			 */
-			ok = try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len,
-				linestart_skip_len, search_type, mip);
-		else
-			ok = try_multiline_join(side_a, hyphen_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip) ||
-			     try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip);
+		lbool have_linestart = linestart_hyphen_detect(side_b, b_len, &linestart_skip_len);
+
+		ok = try_multiline_join(side_a, hyphen_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip) ||
+		     try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len, mip->skip_len, search_type, mip) ||
+		     (have_linestart && (
+		     try_multiline_join(side_a, hyphen_end, NULL, 0, side_b, b_len, linestart_skip_len, search_type, mip) ||
+		     try_multiline_join(side_a, content_end, NULL, 0, side_b, b_len, linestart_skip_len, search_type, mip)));
 	}
 	else if (multiline_search)
 	{

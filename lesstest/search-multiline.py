@@ -264,42 +264,82 @@ open(suppf, 'w').write(
     'lorem-\n-ipsum dolor\n'
     + ''.join('tail %d\n' % i for i in range(20)))
 
-# Point 6's duplicated-hyphen example: allow (but don't require, and
-# don't capture) leading whitespace ahead of the repeated hyphen.
+# When a genuine --linestart-hyphen-regexp marker is found, there's no
+# longer just one ambiguous pair to try: keeping or dropping the
+# hyphen on EACH side is independent, so up to 4 combinations are
+# tried, e.g. for "lorem-" / "-ipsum": drop both ("loremipsum"), keep
+# exactly one ("lorem-ipsum", the same text whichever side keeps it,
+# since both hyphens are the same character here), or keep both
+# ("lorem--ipsum").  Point 6's duplicated-hyphen example pattern below
+# allows (but doesn't require, and doesn't capture) leading whitespace
+# ahead of the repeated hyphen.
+for pat, label in (('/loremipsum', 'both hyphens dropped'),
+                    ('/lorem-ipsum', 'exactly one hyphen kept'),
+                    ('/lorem--ipsum', 'both hyphens kept')):
+    l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
+    l.text(pat); l.key('Enter')
+    check_found('--linestart-hyphen-regexp: %s (%s)' % (label, pat), l)
+    l.close()
+
 l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
 l.text('/lorem-ipsum'); l.key('Enter')
-check_found('--linestart-hyphen-regexp: repeated hyphen resolves to one hyphen', l)
 check_hilite('--linestart-hyphen-regexp: hilite covers both markers', l,
              '\x1b[7mlorem-\x1b[0m\n\x1b[7m-ipsum\x1b[0m')
 l.close()
 
-l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
-l.text('/loremipsum'); l.key('Enter')
-check_not_found('--linestart-hyphen-regexp: dehyphenated form no longer matches', l)
-l.close()
+# Same 3-way check with the exact literal patterns from the feature
+# request: --hyphen-regexp=- and --linestart-hyphen-regexp=- (plain
+# HYPHEN-MINUS, no "\s*", on both sides of the break).
+for pat in ('/loremipsum', '/lorem-ipsum', '/lorem--ipsum'):
+    l = Less(r"--hyphen-regexp='-' --linestart-hyphen-regexp='-' " + suppf)
+    l.text(pat); l.key('Enter')
+    check_found('--hyphen-regexp=- --linestart-hyphen-regexp=-: %s' % pat, l)
+    l.close()
 
-l = Less(r"--linestart-hyphen-regexp='\s*([-‐])' " + suppf)
-l.text('/lorem--ipsum'); l.key('Enter')
-check_not_found('--linestart-hyphen-regexp: double hyphen does not match either', l)
-l.close()
-
-# off (unmarked) by default: the usual ambiguous guessing applies
-# instead, and "-ipsum" keeps its own leading hyphen (it's just part
-# of the continuation text now), so only the single-hyphen form --
-# dehyphenating side_a but not side_b -- is still found.
+# unmarked by default: the usual ambiguous guessing applies instead,
+# and "-ipsum" keeps its own leading hyphen (it's just part of the
+# continuation text now), so only the single-hyphen form --
+# dehyphenating side_a but not side_b -- is still found; the other two
+# 3-way forms are not, since nothing here ever looks at side_b's own
+# leading hyphen without a --linestart-hyphen-regexp marker for it.
 l = Less(suppf)
 l.text('/lorem-ipsum'); l.key('Enter')
 check_found('--linestart-hyphen-regexp unmarked by default: plain dehyphenation still works', l)
 l.close()
 
-# An explicitly empty --linestart-hyphen-regexp (passed as its own
-# argument -- see the --hyphen-regexp note above) behaves exactly like
-# the unset default, since both compile to a pattern that can only
-# ever match with zero width, which is never treated as a genuine
-# marker: lines are "unmarked", not switched on, by an empty pattern.
+l = Less(suppf)
+l.text('/loremipsum'); l.key('Enter')
+check_not_found('--linestart-hyphen-regexp unmarked by default: fully dehyphenated form does not match', l)
+l.close()
+
+# An explicitly empty --linestart-hyphen-regexp matches with zero
+# width unconditionally (unlike the factory default "(\s*)", which
+# matches however much leading whitespace side_b actually has); on
+# this fixture, where the continuation line has none anyway, the two
+# coincide, so this still behaves like the unmarked default here.
 l = Less("--linestart-hyphen-regexp '' " + suppf)
 l.text('/lorem-ipsum'); l.key('Enter')
-check_found("--linestart-hyphen-regexp '': same as the unmarked default", l)
+check_found("--linestart-hyphen-regexp '': same as the default on this no-indent fixture", l)
+l.close()
+
+# --- the factory --hyphen-regexp default, "([-‐])\s*", captures
+# the trailing whitespace as part of the hyphen group, not outside it:
+# the "keep literal" candidate therefore keeps that whitespace too,
+# literally, rather than silently treating it as insignificant. ---
+trailwsf = os.path.join(TMP, 'trailws.txt')
+open(trailwsf, 'w').write(
+    'intro line\nfiller 0\nfiller 1\nfiller 2\n'
+    'word with trailing ws before hyphen-  \nipsum here\n'
+    + ''.join('tail %d\n' % i for i in range(20)))
+
+l = Less(trailwsf)
+l.text('/hyphen-  ipsum'); l.key('Enter')
+check_found('trailing whitespace is part of the hyphen capture: kept literally', l)
+l.close()
+
+l = Less(trailwsf)
+l.text('/hyphen-ipsum'); l.key('Enter')
+check_not_found('trailing whitespace is part of the hyphen capture: not silently dropped', l)
 l.close()
 
 # --- word split by HYPHEN-MINUS ('-'), as a special case of the above
