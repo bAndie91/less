@@ -219,6 +219,61 @@ find(l, 'fill')
 check('first matching block wins; missing files in the list are skipped', l, ['a', 'b', 'c', 'fill'])
 l.close()
 
+# --- :LINE:REGEXP patterns.  A preset which matches turns on --sticky-indent=.
+BODY = 'a\n\tb\n\t\tc\n' + '\t\t\tfill\n' * 40
+NEST = ['a', 'b', 'c', 'fill']
+cases = 0
+def content(name, pattern, head, matches, via=None):
+    global cases
+    cases += 1
+    presets = os.path.join(TMP, 'cp%d' % cases)
+    open(presets, 'w').write(pattern + '\n    --sticky-indent=.\n')
+    src = os.path.join(TMP, 'cf%d' % cases)       # no extension: the name matches nothing
+    open(src, 'wb').write((head + BODY).encode())
+    l = Less('--sticky-presets ' + src, h=10, w=40, env='LESSSTICKYPRESETS=' + presets)
+    find(l, 'fill')
+    check('content: ' + name, l, NEST if matches else ['fill'])
+    l.close()
+
+content('line 1 matches', r':1:^\[', '[x]\n', True)
+content('line 1 does not match line 2', r':1:^\[', 'x\n[y]\n', False)
+content('line 2 matches', r':2:^\[', 'x\n[y]\n', True)
+content('CRLF line ends are stripped', r':1:^\[x\]$', '[x]\r\n', True)
+content('any line', r'::^Content-Type:', 'From: x\nContent-Type: y\n', True)
+content('any line, past a blank one', r'::^Content-Type:', 'From: x\n\nContent-Type: y\n', True)
+content('any line, no match', r'::^Content-Type:', 'From: x\n', False)
+content('H: line in the header', r':H:^Content-Type:', 'From: x\nContent-Type: y\n\n', True)
+content('H: not past a blank line', r':H:^Content-Type:', 'From: x\n\nContent-Type: y\n', False)
+content('H: a line of blanks and CR ends the header', r':H:^Content-Type:', 'From: x\n \t\r\nContent-Type: y\n', False)
+content('H: empty first line, no header', r':H:^$', '\nx\n', False)
+content('patterns of a block are separated by blanks', r':9:^NEVER *', 'x\n', True)
+
+open(os.path.join(TMP, 'cp0'), 'w').write(':0:.\n    --sticky-indent=.\n')
+l = Less('--sticky-presets ' + os.path.join(TMP, 'cf1'), h=10, w=40, env='LESSSTICKYPRESETS=' + os.path.join(TMP, 'cp0'))
+l.key('Enter')      # "Press RETURN to continue", the error went to stderr
+l.close()
+if 'cp0: line 1: expected :LINE:REGEXP' in open(os.path.join(TMP, 'stderr.log')).read():
+    print('ok   content: line 0 is reported as an error')
+else:
+    fails += 1; print('FAIL', 'content: line 0 is reported as an error')
+
+# A pipe is not waited for: the producer sends a screenful and then stays silent.
+fifo = os.path.join(TMP, 'fifo')
+os.mkfifo(fifo)
+def pipe_case(name, pattern, matches):
+    global cases
+    cases += 1
+    presets = os.path.join(TMP, 'cp%d' % cases)
+    open(presets, 'w').write(pattern + '\n    --sticky-indent=.\n')
+    w = subprocess.Popen(['sh', '-c', "{ printf 'x\\n%s'; sleep 30; } > %s" % (BODY.replace('\n', '\\n').replace('\t', '\\t'), fifo)])
+    l = Less('--sticky-presets < ' + fifo, h=10, w=40, env='LESSSTICKYPRESETS=' + presets)
+    l.key('Space')      # (a search would wait for more data on its own)
+    check('pipe: ' + name, l, NEST if matches else ['fill'])
+    l.close(); w.kill()
+pipe_case('line 1 of the first read matches', r':1:^x', True)
+pipe_case('any line: no wait for more data', r'::^NEVER', False)
+pipe_case('H: no wait for the end of the header', r':H:^NEVER', False)
+
 # --- closing lines (--sticky-close)
 FISH = """#!/bin/bash
 f() {

@@ -632,6 +632,25 @@ public int ch_forw_get(void)
 }
 
 /*
+ * Would ch_forw_get have to wait for data to arrive from a pipe:
+ * is the read pointer past all that has been read from it so far?
+ */
+public lbool ch_would_wait(void)
+{
+	struct bufnode *bn;
+
+	if (thisfile == NULL || (ch_flags & CH_CANSEEK) || ch_length() != NULL_POSITION)
+		return (FALSE);
+	FOR_BUFS_IN_CHAIN(BUFHASH(ch_block), bn)
+	{
+		struct buf *bp = bufnode_buf(bn);
+		if (bp->block == ch_block)
+			return (ch_offset >= bp->datasize);
+	}
+	return (TRUE);
+}
+
+/*
  * Pre-decrement the read pointer and get the new current char.
  */
 public int ch_back_get(void)

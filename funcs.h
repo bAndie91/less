@@ -55,6 +55,7 @@ public int ch_beg_seek(void);
 public POSITION ch_length(void);
 public POSITION ch_tell(void);
 public int ch_forw_get(void);
+public lbool ch_would_wait(void);
 public int ch_back_get(void);
 public void ch_setbufspace(ssize_t bufspace);
 public void ch_flush(void);

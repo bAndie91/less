@@ -1554,6 +1554,28 @@ which is not an option or an assignment.
 So after "#!/usr/bin/env /bin/bash \-e" the patterns $bash and $*sh match.
 Input from a pipe has no name, but is matched by its first line.
 .PP
+A pattern of the form :\fILINE\fP:\fIREGEXP\fP matches a file which has a line
+that matches the regular expression \fIREGEXP\fP (which is not quoted either).
+\fILINE\fP is the number of the line, counted from 1;
+or empty, and then any line of the file may match;
+or the letter H, and then only the lines of the header are searched,
+that is the lines from the start of the file to the first blank line
+(a line with only white space, a carriage return included).
+For example, :1:^\e[ matches a file whose first line starts with "[",
+and ::^Content\-Type: a file which has such a line anywhere.
+\fIREGEXP\fP contains no blanks, because blanks separate the patterns;
+write [[:blank:]] for one.
+.PP
+The file is read only when it is needed:
+for each block the patterns are tried
+first as file names, then the $ patterns, then the : patterns,
+and reading stops at the line which decides.
+At most the first 1048576 bytes are read, and
+the lines are cut to 8192 characters.
+Less does not wait for more data from a pipe for this,
+after its first read: only the data which has been read from it so far
+is examined, and a line which is not complete in it is ignored.
+.PP
 The presets files are the ones in the colon-separated list
 in the environment variable LESSSTICKYPRESETS, if it is set;
 else the file .lesssticky in the home directory and

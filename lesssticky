@@ -9,6 +9,11 @@
 # starts with "$" is a glob matched against the interpreter on the "#!" line
 # of the file: the last component of its path, or if that is "env", of the
 # first argument of env which is not an option or a NAME=value.
+# A pattern :LINE:REGEXP matches a file which has a line (number LINE from 1,
+# or any line if LINE is empty, or any line of the header, up to the first
+# blank line, if LINE is H) matching REGEXP, which has no blanks in it:
+# :1:^\[   ::^Content-Type:   :H:^From[[:blank:]]
+# The file is read only if the name patterns and the $ patterns have not matched.
 #
 # --sticky-close names the lines which end a scope (fi, done, }, end ...), so
 # that deeper lines after them (continuation lines, heredocs) are not shown
