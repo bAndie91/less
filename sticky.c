@@ -1012,6 +1012,20 @@ static int screen_stack(struct sticky_hdr *out)
 }
 
 /*
+ * The screen was reverse-scrolled by n lines, so the old overlay text now
+ * sits n rows lower than last_rows says; make the next overlay restore it.
+ */
+public void sticky_scrolled_back(int n)
+{
+	if (last_rows > 0)
+	{
+		last_rows += n;
+		if (last_rows > sc_height-1)
+			last_rows = sc_height-1;
+	}
+}
+
+/*
  * Draw the sticky headers over the top rows of the screen.
  * Return TRUE if anything was drawn.
  */

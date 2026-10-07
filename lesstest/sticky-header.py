@@ -496,6 +496,20 @@ print(('ok   ' if dt < 8 else 'FAIL ') + 'balanced worst-case jump took %.2fs' %
 fails += dt >= 8
 l.close()
 
+# --- scrolling up redraws incrementally: no stale header rows left behind
+l = Less('--sticky-presets ' + pyfile, h=14, w=70, env=ENV)
+l.key('G')
+bad = 0
+for k in ['Up'] * 25 + ['Down'] * 3 + ['Up'] * 5:
+    l.key(k); inc = l.rows()
+    l.key('r')
+    bad += inc != l.rows()
+if bad:
+    fails += 1; print('FAIL', 'scroll up matches a full repaint -', bad, 'stale screens')
+else:
+    print('ok  ', 'scroll up matches a full repaint')
+l.close()
+
 tmux('kill-session', '-t', KEEPALIVE)
 print('%d failure(s)' % fails)
 if fails:

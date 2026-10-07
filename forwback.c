@@ -393,7 +393,7 @@ public void back(int n, POSITION pos, lbool force, lbool only_last)
 	lbool do_repaint;
 
 	squish_check();
-	do_repaint = (n > get_back_scroll() || (only_last && n > sc_height-1) || header_lines > 0 || sticky_active());
+	do_repaint = (n > get_back_scroll() || (only_last && n > sc_height-1) || header_lines > 0);
 #if HILITE_SEARCH
 	if (pos != NULL_POSITION && (hilite_search == OPT_ONPLUS || is_filtering() || status_col)) {
 		prep_hilite((pos < (POSITION) (3*size_linebuf)) ? 0 : pos - (POSITION) (3*size_linebuf), pos, -1);
@@ -442,6 +442,8 @@ public void back(int n, POSITION pos, lbool force, lbool only_last)
 		repaint();
 	else
 	{
+		/* The reverse scroll pushed the old sticky rows down nlines. */
+		sticky_scrolled_back(nlines);
 		overlay_header();
 		lower_left();
 	}
